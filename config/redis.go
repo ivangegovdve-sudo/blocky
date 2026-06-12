@@ -1,7 +1,8 @@
 package config
 
 import (
-	"github.com/sirupsen/logrus"
+	"fmt"
+	"log/slog"
 )
 
 // Redis configuration for the redis connection
@@ -35,27 +36,27 @@ func (c *Redis) IsEnabled() bool {
 }
 
 // LogConfig implements `config.Configurable`
-func (c *Redis) LogConfig(logger *logrus.Entry) {
+func (c *Redis) LogConfig(logger *slog.Logger) {
 	if len(c.SentinelAddresses) == 0 {
-		logger.Info("address: ", c.Address)
+		logger.Info(fmt.Sprintf("address: %s", c.Address))
 	}
 
-	logger.Info("username: ", c.Username)
-	logger.Info("password: ", secretObfuscator)
-	logger.Info("database: ", c.Database)
-	logger.Info("required: ", c.Required)
-	logger.Info("connectionAttempts: ", c.ConnectionAttempts)
-	logger.Info("connectionCooldown: ", c.ConnectionCooldown)
+	logger.Info(fmt.Sprintf("username: %s", c.Username))
+	logger.Info(fmt.Sprintf("password: %s", secretObfuscator))
+	logger.Info(fmt.Sprintf("database: %d", c.Database))
+	logger.Info(fmt.Sprintf("required: %t", c.Required))
+	logger.Info(fmt.Sprintf("connectionAttempts: %d", c.ConnectionAttempts))
+	logger.Info(fmt.Sprintf("connectionCooldown: %s", c.ConnectionCooldown))
 
 	if len(c.SentinelAddresses) > 0 {
 		logger.Info("sentinel:")
-		logger.Info("  master: ", c.Address)
-		logger.Info("  username: ", c.SentinelUsername)
-		logger.Info("  password: ", secretObfuscator)
+		logger.Info(fmt.Sprintf("  master: %s", c.Address))
+		logger.Info(fmt.Sprintf("  username: %s", c.SentinelUsername))
+		logger.Info(fmt.Sprintf("  password: %s", secretObfuscator))
 		logger.Info("  addresses:")
 
 		for _, addr := range c.SentinelAddresses {
-			logger.Info("    - ", addr)
+			logger.Info(fmt.Sprintf("    - %s", addr))
 		}
 	}
 }

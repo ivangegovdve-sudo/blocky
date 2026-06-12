@@ -1,6 +1,9 @@
 package config
 
-import "github.com/sirupsen/logrus"
+import (
+	"fmt"
+	"log/slog"
+)
 
 // Metrics contains the config values for prometheus
 type Metrics struct {
@@ -16,6 +19,6 @@ func (c *Metrics) IsEnabled() bool {
 }
 
 // LogConfig implements `config.Configurable`.
-func (c *Metrics) LogConfig(logger *logrus.Entry) {
-	logger.Infof("url path: %s", c.Path)
+func (c *Metrics) LogConfig(logger *slog.Logger) {
+	logger.Info(fmt.Sprintf("url path: %s", c.Path))
 }

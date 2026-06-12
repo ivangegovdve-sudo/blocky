@@ -100,7 +100,7 @@ func (s *Schedule) validate() error {
 
 	for _, wd := range s.Weekdays {
 		if seen[wd] {
-			log.Log().Warnf("schedule contains duplicate weekday '%s', possible typo?", wd)
+			log.Log().Warn(fmt.Sprintf("schedule contains duplicate weekday '%s', possible typo?", wd))
 		}
 
 		seen[wd] = true
