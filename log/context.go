@@ -2,45 +2,54 @@ package log
 
 import (
 	"context"
-
-	"github.com/sirupsen/logrus"
+	"log/slog"
 )
 
-type ctxKey struct{}
+type attrsKey struct{}
 
-func NewCtx(ctx context.Context, logger *logrus.Entry) (context.Context, *logrus.Entry) {
-	ctx = context.WithValue(ctx, ctxKey{}, logger)
+// ctxWithAttrs appends request-scoped attrs to the context. They are injected
+// into every record emitted with this context by the contextHandler.
+func ctxWithAttrs(ctx context.Context, attrs ...slog.Attr) context.Context {
+	existing := attrsFromCtx(ctx)
 
-	return ctx, entryWithCtx(ctx, logger)
+	merged := make([]slog.Attr, 0, len(existing)+len(attrs))
+	merged = append(merged, existing...)
+	merged = append(merged, attrs...)
+
+	return context.WithValue(ctx, attrsKey{}, merged)
 }
 
-func FromCtx(ctx context.Context) *logrus.Entry {
-	logger, ok := ctx.Value(ctxKey{}).(*logrus.Entry)
-	if !ok {
-		// Fallback to the global logger
-		return logrus.NewEntry(Log())
-	}
+func attrsFromCtx(ctx context.Context) []slog.Attr {
+	attrs, _ := ctx.Value(attrsKey{}).([]slog.Attr)
 
-	// Ensure `logger.Context == ctx`, not always the case since `ctx` could be a child of `logger.Context`
-	return entryWithCtx(ctx, logger)
+	return attrs
 }
 
-func entryWithCtx(ctx context.Context, logger *logrus.Entry) *logrus.Entry {
-	loggerCopy := *logger
-	loggerCopy.Context = ctx
+// FromCtx returns the global logger. Request-scoped attrs stored in ctx are
+// injected by the contextHandler at emit time, so the returned logger need not
+// carry them itself.
+func FromCtx(_ context.Context) *slog.Logger { return Log() }
 
-	return &loggerCopy
+// NewCtx stores attrs in ctx and returns it with a logger (the global logger).
+func NewCtx(ctx context.Context, attrs ...slog.Attr) (context.Context, *slog.Logger) {
+	ctx = ctxWithAttrs(ctx, attrs...)
+
+	return ctx, Log()
 }
 
-func WrapCtx(ctx context.Context, wrap func(*logrus.Entry) *logrus.Entry) (context.Context, *logrus.Entry) {
-	logger := FromCtx(ctx)
-	logger = wrap(logger)
-
-	return NewCtx(ctx, logger)
+// CtxWithFields appends attrs to ctx and returns a logger that will emit them.
+func CtxWithFields(ctx context.Context, attrs ...slog.Attr) (context.Context, *slog.Logger) {
+	return NewCtx(ctx, attrs...)
 }
 
-func CtxWithFields(ctx context.Context, fields logrus.Fields) (context.Context, *logrus.Entry) {
-	return WrapCtx(ctx, func(e *logrus.Entry) *logrus.Entry {
-		return e.WithFields(fields)
-	})
+// WrapCtx appends attrs produced by wrap to ctx. Kept for call-site
+// compatibility with the previous API shape.
+func WrapCtx(ctx context.Context, attrs ...slog.Attr) (context.Context, *slog.Logger) {
+	return NewCtx(ctx, attrs...)
+}
+
+// WithIndent calls fn with a logger that prepends indent to every message.
+// Nesting accumulates indents.
+func WithIndent(l *slog.Logger, indent string, fn func(*slog.Logger)) {
+	fn(slog.New(&indentHandler{indent: indent, next: l.Handler()}))
 }
