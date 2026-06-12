@@ -7,16 +7,23 @@ import (
 	"sync"
 )
 
-// Recorder is a slog.Handler that records emitted records for test assertions.
-// It replaces the old logrus MockLoggerHook / test.NewGlobal patterns.
-type Recorder struct {
+// recorderStore is the shared backing storage for a Recorder and any
+// WithAttrs-derived recorders, so the original handle sees all records.
+type recorderStore struct {
 	mu      sync.Mutex
 	records []slog.Record
 }
 
+// Recorder is a slog.Handler that records emitted records for test assertions.
+// It replaces the old logrus MockLoggerHook / test.NewGlobal patterns.
+type Recorder struct {
+	store *recorderStore
+	base  []slog.Attr // attrs pre-attached via WithAttrs
+}
+
 // NewRecorder returns a logger writing into a fresh Recorder (trace level).
 func NewRecorder() (*slog.Logger, *Recorder) {
-	rec := &Recorder{}
+	rec := &Recorder{store: &recorderStore{}}
 
 	return slog.New(rec), rec
 }
@@ -24,31 +31,44 @@ func NewRecorder() (*slog.Logger, *Recorder) {
 func (r *Recorder) Enabled(context.Context, slog.Level) bool { return true }
 
 func (r *Recorder) Handle(_ context.Context, rec slog.Record) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.records = append(r.records, rec.Clone())
+	c := rec.Clone()
+	if len(r.base) > 0 {
+		// prepend base attrs (pre-attached via WithAttrs)
+		c.AddAttrs(r.base...)
+	}
+
+	r.store.mu.Lock()
+	defer r.store.mu.Unlock()
+	r.store.records = append(r.store.records, c)
 
 	return nil
 }
 
-func (r *Recorder) WithAttrs([]slog.Attr) slog.Handler { return r }
-func (r *Recorder) WithGroup(string) slog.Handler      { return r }
+func (r *Recorder) WithAttrs(attrs []slog.Attr) slog.Handler {
+	merged := make([]slog.Attr, 0, len(r.base)+len(attrs))
+	merged = append(merged, r.base...)
+	merged = append(merged, attrs...)
+
+	return &Recorder{store: r.store, base: merged}
+}
+
+func (r *Recorder) WithGroup(string) slog.Handler { return r }
 
 // Records returns a copy of the recorded records.
 func (r *Recorder) Records() []slog.Record {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.store.mu.Lock()
+	defer r.store.mu.Unlock()
 
-	return append([]slog.Record(nil), r.records...)
+	return append([]slog.Record(nil), r.store.records...)
 }
 
 // Messages returns the recorded messages in order.
 func (r *Recorder) Messages() []string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.store.mu.Lock()
+	defer r.store.mu.Unlock()
 
-	msgs := make([]string, len(r.records))
-	for i, rec := range r.records {
+	msgs := make([]string, len(r.store.records))
+	for i, rec := range r.store.records {
 		msgs[i] = rec.Message
 	}
 
@@ -57,22 +77,22 @@ func (r *Recorder) Messages() []string {
 
 // LastMessage returns the most recent message, or "" if none.
 func (r *Recorder) LastMessage() string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.store.mu.Lock()
+	defer r.store.mu.Unlock()
 
-	if len(r.records) == 0 {
+	if len(r.store.records) == 0 {
 		return ""
 	}
 
-	return r.records[len(r.records)-1].Message
+	return r.store.records[len(r.store.records)-1].Message
 }
 
 // Attr looks up an attr by key on the most recent record.
 func (r *Recorder) Attr(key string) (slog.Value, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.store.mu.Lock()
+	defer r.store.mu.Unlock()
 
-	if len(r.records) == 0 {
+	if len(r.store.records) == 0 {
 		return slog.Value{}, false
 	}
 
@@ -80,7 +100,7 @@ func (r *Recorder) Attr(key string) (slog.Value, bool) {
 
 	var ok bool
 
-	r.records[len(r.records)-1].Attrs(func(a slog.Attr) bool {
+	r.store.records[len(r.store.records)-1].Attrs(func(a slog.Attr) bool {
 		if a.Key == key {
 			found, ok = a.Value, true
 
@@ -95,18 +115,19 @@ func (r *Recorder) Attr(key string) (slog.Value, bool) {
 
 // Reset clears recorded records.
 func (r *Recorder) Reset() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.records = nil
+	r.store.mu.Lock()
+	defer r.store.mu.Unlock()
+	r.store.records = nil
 }
 
-// CaptureGlobal swaps the global logger for a Recorder and returns a restore
+// CaptureGlobal swaps the global logger for a Recorder (wrapped in a
+// contextHandler so context-stored attrs are captured) and returns a restore
 // func (call via DeferCleanup). Ginkgo runs specs serially per process, so this
 // is safe within a spec.
 func CaptureGlobal() (*Recorder, func()) {
 	prev := logger
-	rec := &Recorder{}
-	logger = slog.New(rec)
+	rec := &Recorder{store: &recorderStore{}}
+	logger = slog.New(&contextHandler{next: rec})
 	slog.SetDefault(logger)
 
 	return rec, func() {

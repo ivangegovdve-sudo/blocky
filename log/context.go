@@ -42,8 +42,8 @@ func CtxWithFields(ctx context.Context, attrs ...slog.Attr) (context.Context, *s
 	return NewCtx(ctx, attrs...)
 }
 
-// WrapCtx appends attrs produced by wrap to ctx. Kept for call-site
-// compatibility with the previous API shape.
+// WrapCtx appends attrs to ctx and returns a logger (the global logger).
+// Callers must pass attrs directly; the old transform-function signature is gone.
 func WrapCtx(ctx context.Context, attrs ...slog.Attr) (context.Context, *slog.Logger) {
 	return NewCtx(ctx, attrs...)
 }

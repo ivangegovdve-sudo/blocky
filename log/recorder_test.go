@@ -25,6 +25,25 @@ func TestRecorderCapturesMessages(t *testing.T) {
 	}
 }
 
+func TestRecorderWithAttrsVisible(t *testing.T) {
+	logger, rec := NewRecorder()
+
+	logger.With(slog.String("prefix", "blk")).Info("m")
+
+	if got := rec.LastMessage(); got != "m" {
+		t.Fatalf("LastMessage() = %q, want %q", got, "m")
+	}
+
+	val, ok := rec.Attr("prefix")
+	if !ok {
+		t.Fatal("Attr(\"prefix\") not found")
+	}
+
+	if got := val.String(); got != "blk" {
+		t.Errorf("Attr(\"prefix\") = %q, want %q", got, "blk")
+	}
+}
+
 func TestCaptureGlobalRestores(t *testing.T) {
 	before := Log()
 
@@ -37,5 +56,23 @@ func TestCaptureGlobalRestores(t *testing.T) {
 	restore()
 	if Log() != before {
 		t.Error("CaptureGlobal restore did not reinstate the previous logger")
+	}
+}
+
+func TestCaptureGlobalContextAttrs(t *testing.T) {
+	rec, restore := CaptureGlobal()
+	defer restore()
+
+	ctx := context.Background()
+	ctx, _ = CtxWithFields(ctx, slog.String("req_id", "r1"))
+	Log().InfoContext(ctx, "with-ctx")
+
+	val, ok := rec.Attr("req_id")
+	if !ok {
+		t.Fatal("Attr(\"req_id\") not found")
+	}
+
+	if got := val.String(); got != "r1" {
+		t.Errorf("Attr(\"req_id\") = %q, want %q", got, "r1")
 	}
 }

@@ -71,8 +71,6 @@ func configureTo(w io.Writer, cfg *Config) {
 // newLogger builds a slog logger for cfg writing to w, wrapped in the
 // contextHandler so request-scoped attrs are injected lazily.
 func newLogger(w io.Writer, cfg *Config) *slog.Logger {
-	levelVar.Set(cfg.Level.ToSlogLevel())
-
 	var base slog.Handler
 
 	switch cfg.Format {
@@ -122,12 +120,14 @@ func noColor(w io.Writer) bool {
 // replaceAttr drops the time attr when timestamps are disabled and relabels the
 // custom trace level to "TRACE" for both text and JSON output.
 func replaceAttr(cfg *Config) func([]string, slog.Attr) slog.Attr {
+	noTimestamp := !cfg.Timestamp
+
 	return func(groups []string, a slog.Attr) slog.Attr {
 		if len(groups) != 0 {
 			return a
 		}
 
-		if a.Key == slog.TimeKey && !cfg.Timestamp {
+		if a.Key == slog.TimeKey && noTimestamp {
 			return slog.Attr{}
 		}
 
@@ -146,7 +146,10 @@ func PrefixedLog(prefix string) *slog.Logger {
 	return logger.With(slog.String(prefixKey, prefix))
 }
 
-// WithPrefix returns logger tagged with an additional prefix attr.
+// WithPrefix appends a prefix attr; it does NOT merge with an existing prefix.
+// To nest prefixes, construct the combined literal (e.g. PrefixedLog("blocking.client_id_cache"))
+// rather than calling WithPrefix on an already-prefixed logger, to avoid
+// duplicate `prefix` keys in JSON output.
 func WithPrefix(l *slog.Logger, prefix string) *slog.Logger {
 	return l.With(slog.String(prefixKey, prefix))
 }
