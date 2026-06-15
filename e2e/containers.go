@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"log/slog"
 
 	"github.com/0xERR0R/blocky/config"
 	"github.com/0xERR0R/blocky/util"
@@ -380,7 +380,7 @@ func checkBlockyReadiness(ctx context.Context, cfg *config.Config, container tes
 			return nil
 		},
 		retry.OnRetry(func(n uint, err error) {
-			log.Infof("Performing retry DNS request #%d: %s\n", n, err)
+			slog.Info(fmt.Sprintf("Performing retry DNS request #%d: %s", n, err))
 		}),
 		retry.Attempts(retryAttempts),
 		retry.DelayType(retry.BackOffDelay),
@@ -398,7 +398,7 @@ func checkBlockyReadiness(ctx context.Context, cfg *config.Config, container tes
 				return doHTTPRequest(ctx, container, port)
 			},
 			retry.OnRetry(func(n uint, err error) {
-				log.Infof("Performing retry HTTP request #%d: %s\n", n, err)
+				slog.Info(fmt.Sprintf("Performing retry HTTP request #%d: %s", n, err))
 			}),
 			retry.Attempts(retryAttempts),
 			retry.DelayType(retry.BackOffDelay),

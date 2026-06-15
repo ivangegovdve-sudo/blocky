@@ -9,7 +9,6 @@ import (
 
 	. "github.com/0xERR0R/blocky/config/migration"
 	"github.com/0xERR0R/blocky/log"
-	"github.com/sirupsen/logrus"
 )
 
 // Blocking configuration for query blocking
@@ -46,9 +45,7 @@ type Blocking struct {
 	} `yaml:",inline"`
 }
 
-// migrate bridges to the logrus-based config/migration package.
-// TODO: remove logrus bridge when config/migration is migrated to slog.
-func (c *Blocking) migrate(logger *logrus.Entry) bool {
+func (c *Blocking) migrate(logger *slog.Logger) bool {
 	return Migrate(logger, "blocking", c.Deprecated, map[string]Migrator{
 		"blackLists":       Move(To("denylists", c)),
 		"whiteLists":       Move(To("allowlists", c)),

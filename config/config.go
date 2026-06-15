@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/sirupsen/logrus"
 
 	. "github.com/0xERR0R/blocky/config/migration"
 	"github.com/0xERR0R/blocky/config/schema"
@@ -777,12 +776,8 @@ func formatSchemaErrors(errs []schema.Error) string {
 	return strings.Join(lines, "\n")
 }
 
-// migrate bridges to the logrus-based config/migration package.
-// TODO: remove logrus bridge when config/migration is migrated to slog.
 func (cfg *Config) migrate(logger *slog.Logger) bool {
-	le := logrus.NewEntry(logrus.StandardLogger())
-
-	usesDepredOpts := Migrate(le, "", cfg.Deprecated, map[string]Migrator{
+	usesDepredOpts := Migrate(logger, "", cfg.Deprecated, map[string]Migrator{
 		"upstream":        Move(To("upstreams.groups", &cfg.Upstreams)),
 		"upstreamTimeout": Move(To("upstreams.timeout", &cfg.Upstreams)),
 		"disableIPv6": Apply(To("filtering.queryTypes", &cfg.Filtering), func(oldValue bool) {
@@ -808,8 +803,8 @@ func (cfg *Config) migrate(logger *slog.Logger) bool {
 		}),
 	})
 
-	usesDepredOpts = cfg.Blocking.migrate(le) || usesDepredOpts
-	usesDepredOpts = cfg.HostsFile.migrate(le) || usesDepredOpts
+	usesDepredOpts = cfg.Blocking.migrate(logger) || usesDepredOpts
+	usesDepredOpts = cfg.HostsFile.migrate(logger) || usesDepredOpts
 
 	return usesDepredOpts
 }

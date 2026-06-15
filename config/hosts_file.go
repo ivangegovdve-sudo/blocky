@@ -6,7 +6,6 @@ import (
 
 	. "github.com/0xERR0R/blocky/config/migration"
 	"github.com/0xERR0R/blocky/log"
-	"github.com/sirupsen/logrus"
 )
 
 type HostsFile struct {
@@ -26,9 +25,7 @@ type HostsFile struct {
 	} `yaml:",inline"`
 }
 
-// migrate bridges to the logrus-based config/migration package.
-// TODO: remove logrus bridge when config/migration is migrated to slog.
-func (c *HostsFile) migrate(logger *logrus.Entry) bool {
+func (c *HostsFile) migrate(logger *slog.Logger) bool {
 	return Migrate(logger, "hostsFile", c.Deprecated, map[string]Migrator{
 		"refreshPeriod": Move(To("loading.refreshPeriod", &c.Loading)),
 		"filePath": Apply(To("sources", c), func(value BytesSource) {
