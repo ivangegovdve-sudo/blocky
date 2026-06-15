@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 	"os"
 
 	"github.com/0xERR0R/blocky/log"
@@ -22,7 +23,7 @@ func NewValidateCommand() *cobra.Command {
 }
 
 func validateConfiguration(_ *cobra.Command, _ []string) error {
-	log.Log().Infof("Validating configuration file: %s", configPath)
+	log.Log().Info(fmt.Sprintf("Validating configuration file: %s", configPath))
 
 	_, err := os.Stat(configPath)
 	if err != nil && errors.Is(err, os.ErrNotExist) {

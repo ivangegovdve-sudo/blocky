@@ -55,14 +55,14 @@ func warnMissingPrivilegedPortCapability(ports config.Ports) {
 	effective, err := raiseNetBindService()
 	if err != nil {
 		if privileged := ports.PrivilegedPorts(); len(privileged) > 0 {
-			log.Log().Warnf("could not adjust process capabilities (%v); binding "+
+			log.Log().Warn(fmt.Sprintf("could not adjust process capabilities (%v); binding "+
 				"privileged port(s) %s may fail — %s",
-				err, strings.Join(privileged, ", "), privilegedPortCapHint)
+				err, strings.Join(privileged, ", "), privilegedPortCapHint))
 
 			return
 		}
 
-		log.Log().Warnf("could not adjust process capabilities: %v", err)
+		log.Log().Warn(fmt.Sprintf("could not adjust process capabilities: %v", err))
 
 		return
 	}
@@ -72,8 +72,8 @@ func warnMissingPrivilegedPortCapability(ports config.Ports) {
 	}
 
 	if privileged := ports.PrivilegedPorts(); len(privileged) > 0 {
-		log.Log().Warnf("configured to listen on privileged port(s) %s without "+
-			"CAP_NET_BIND_SERVICE; %s", strings.Join(privileged, ", "), privilegedPortCapHint)
+		log.Log().Warn(fmt.Sprintf("configured to listen on privileged port(s) %s without "+
+			"CAP_NET_BIND_SERVICE; %s", strings.Join(privileged, ", "), privilegedPortCapHint))
 	}
 }
 
@@ -109,7 +109,7 @@ func startServer(_ *cobra.Command, _ []string) error {
 	go func() {
 		select {
 		case <-signals:
-			log.Log().Infof("Terminating...")
+			log.Log().Info("Terminating...")
 
 			// Cancel background operations (periodic refresh, etc.)
 			cancelFn()
@@ -147,7 +147,7 @@ func printBanner() {
 	log.Log().Info("_/                                               _/_/           _/")
 	log.Log().Info("_/                                                              _/")
 	log.Log().Info("_/                                                              _/")
-	log.Log().Infof("_/  Version: %-18s Build time: %-18s  _/", util.Version, util.BuildTime)
+	log.Log().Info(fmt.Sprintf("_/  Version: %-18s Build time: %-18s  _/", util.Version, util.BuildTime))
 	log.Log().Info("_/                                                              _/")
 	log.Log().Info("_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/")
 }
