@@ -1,17 +1,17 @@
 package querylog
 
 import (
+	"log/slog"
 	"reflect"
 	"strings"
 
 	"github.com/0xERR0R/blocky/log"
-	"github.com/sirupsen/logrus"
 )
 
 const loggerPrefixLoggerWriter = "queryLog"
 
 type LoggerWriter struct {
-	logger *logrus.Entry
+	logger *slog.Logger
 }
 
 func NewLoggerWriter() *LoggerWriter {
@@ -19,17 +19,15 @@ func NewLoggerWriter() *LoggerWriter {
 }
 
 func (d *LoggerWriter) Write(entry *LogEntry) {
-	fields := LogEntryFields(entry)
-
-	d.logger.WithFields(fields).Infof("query resolved")
+	d.logger.Info("query resolved", slog.Any("entry", entry))
 }
 
 func (d *LoggerWriter) CleanUp() {
 	// Nothing to do
 }
 
-func LogEntryFields(entry *LogEntry) logrus.Fields {
-	return withoutZeroes(logrus.Fields{
+func LogEntryFields(entry *LogEntry) map[string]any {
+	return withoutZeroes(map[string]any{
 		"client_ip":       entry.ClientIP,
 		"client_names":    strings.Join(entry.ClientNames, "; "),
 		"response_reason": entry.ResponseReason,
@@ -43,7 +41,7 @@ func LogEntryFields(entry *LogEntry) logrus.Fields {
 	})
 }
 
-func withoutZeroes(fields logrus.Fields) logrus.Fields {
+func withoutZeroes(fields map[string]any) map[string]any {
 	for k, v := range fields {
 		if reflect.ValueOf(v).IsZero() {
 			delete(fields, k)

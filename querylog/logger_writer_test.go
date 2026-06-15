@@ -3,8 +3,7 @@ package querylog
 import (
 	"time"
 
-	"github.com/sirupsen/logrus"
-	"github.com/sirupsen/logrus/hooks/test"
+	"github.com/0xERR0R/blocky/log"
 
 	. "github.com/onsi/gomega"
 
@@ -16,16 +15,16 @@ var _ = Describe("LoggerWriter", func() {
 		When("New log entry was created", func() {
 			It("should be logged", func() {
 				writer := NewLoggerWriter()
-				logger, hook := test.NewNullLogger()
-				writer.logger = logger.WithField("k", "v")
+				logger, rec := log.NewRecorder()
+				writer.logger = logger
 
 				writer.Write(&LogEntry{
 					Start:      time.Now(),
 					DurationMs: 20,
 				})
 
-				Expect(hook.Entries).Should(HaveLen(1))
-				Expect(hook.LastEntry().Message).Should(Equal("query resolved"))
+				Expect(rec.Records()).Should(HaveLen(1))
+				Expect(rec.LastMessage()).Should(Equal("query resolved"))
 			})
 		})
 		When("Cleanup is called", func() {
@@ -59,7 +58,7 @@ var _ = Describe("LoggerWriter", func() {
 
 	DescribeTable("withoutZeroes",
 		func(value any, isZero bool) {
-			fields := withoutZeroes(logrus.Fields{"a": value})
+			fields := withoutZeroes(map[string]any{"a": value})
 
 			if isZero {
 				Expect(fields).Should(BeEmpty())

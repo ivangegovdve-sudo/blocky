@@ -1,6 +1,7 @@
 package stringcache
 
 import (
+	"fmt"
 	"regexp"
 	"slices"
 	"sort"
@@ -55,7 +56,7 @@ func (cache stringMap) findMatch(searchString string) (string, bool) {
 	if idx < searchBucketLen {
 		blockRule := cache[searchLen][idx*searchLen : idx*searchLen+searchLen]
 		if blockRule == normalized {
-			log.PrefixedLog("string_map").Debugf("block rule '%s' matched with '%s'", blockRule, searchString)
+			log.PrefixedLog("string_map").Debug(fmt.Sprintf("block rule '%s' matched with '%s'", blockRule, searchString))
 
 			return blockRule, true
 		}
@@ -131,7 +132,7 @@ func (cache regexCache) elementCount() int {
 func (cache regexCache) findMatch(searchString string) (string, bool) {
 	for _, regex := range cache {
 		if regex.MatchString(searchString) {
-			log.PrefixedLog("regex_cache").Debugf("regex '%s' matched with '%s'", regex, searchString)
+			log.PrefixedLog("regex_cache").Debug(fmt.Sprintf("regex '%s' matched with '%s'", regex, searchString))
 
 			// re-wrap in the '/.../' delimiters that addEntry strips on insertion
 			// so the reported rule matches the entry as configured by the user.
@@ -156,7 +157,7 @@ func (r *regexCacheFactory) addEntry(entry string) bool {
 
 	compile, err := regexp.Compile(entry)
 	if err != nil {
-		log.Log().Warnf("invalid regex '%s'", entry)
+		log.Log().Warn(fmt.Sprintf("invalid regex '%s'", entry))
 
 		return true // invalid but handled
 	}
@@ -206,7 +207,7 @@ func (cache wildcardCache) findMatch(domain string) (string, bool) {
 	// concern rather than being hard-coded here.
 	rule := "*." + trie.JoinTLD(labels)
 
-	log.PrefixedLog("wildcard_cache").Debugf("wildcard block rule '%s' matched with '%s'", rule, domain)
+	log.PrefixedLog("wildcard_cache").Debug(fmt.Sprintf("wildcard block rule '%s' matched with '%s'", rule, domain))
 
 	return rule, true
 }
@@ -229,7 +230,7 @@ func (r *wildcardCacheFactory) addEntry(entry string) bool {
 	}
 
 	if !strings.HasPrefix(entry, "*.") || globCount > 1 {
-		log.Log().Warnf("unsupported wildcard '%s': must start with '*.' and contain no other '*'", entry)
+		log.Log().Warn(fmt.Sprintf("unsupported wildcard '%s': must start with '*.' and contain no other '*'", entry))
 
 		return true // invalid but handled
 	}

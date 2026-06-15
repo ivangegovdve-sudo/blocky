@@ -122,7 +122,7 @@ func startServer(_ *cobra.Command, _ []string) error {
 			done <- true
 
 		case err := <-errChan:
-			log.Log().Error("server start failed: ", err)
+			log.Log().Error("server start failed", log.AttrError(err))
 			terminationErr = err
 			done <- true
 		}
