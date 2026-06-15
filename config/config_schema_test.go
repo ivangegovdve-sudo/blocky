@@ -26,7 +26,7 @@ var _ = Describe("schema-enriched config loading", func() {
 
 			err := unmarshalConfig(logger, data, &Config{})
 			Expect(err).Should(Succeed())
-			Expect(hook.Messages).ShouldNot(ContainElement(ContainSubstring("does not match schema")))
+			Expect(rec.Messages()).ShouldNot(ContainElement(ContainSubstring("does not match schema")))
 		})
 	})
 
@@ -36,7 +36,7 @@ var _ = Describe("schema-enriched config loading", func() {
 
 			err := unmarshalConfig(logger, data, &Config{})
 			Expect(err).Should(Succeed())
-			Expect(hook.Messages).ShouldNot(ContainElement(ContainSubstring("does not match schema")))
+			Expect(rec.Messages()).ShouldNot(ContainElement(ContainSubstring("does not match schema")))
 		})
 	})
 
@@ -53,7 +53,7 @@ var _ = Describe("schema-enriched config loading", func() {
 
 			err = unmarshalConfig(logger, data, &Config{})
 			Expect(err).Should(Succeed())
-			Expect(hook.Messages).ShouldNot(ContainElement(ContainSubstring("does not match schema")),
+			Expect(rec.Messages()).ShouldNot(ContainElement(ContainSubstring("does not match schema")),
 				"every form in testdata/superset_config.yml must validate against the schema too")
 		})
 	})
