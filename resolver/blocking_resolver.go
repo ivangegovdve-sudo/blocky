@@ -201,7 +201,7 @@ func (r *BlockingResolver) subscribeEvents(ctx context.Context) error {
 				r.internalEnableBlocking()
 			} else {
 				if disableErr := r.internalDisableBlocking(ctx, state.Duration, state.Groups); disableErr != nil {
-					log.PrefixedLog("blocking").Warn("blocking couldn't be disabled: ", disableErr)
+					log.PrefixedLog("blocking").Warn("blocking couldn't be disabled", log.AttrError(disableErr))
 				}
 			}
 		}()

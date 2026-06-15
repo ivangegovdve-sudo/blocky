@@ -264,11 +264,11 @@ var _ = Describe("DNSSECResolver", func() {
 		})
 
 		It("should log configuration", func() {
-			logger, hook := log.NewMockEntry()
+			logger, rec := log.NewRecorder()
 
 			sut.LogConfig(logger)
 
-			Expect(hook.Calls).ShouldNot(BeEmpty())
+			Expect(rec.Records()).ShouldNot(BeEmpty())
 		})
 	})
 

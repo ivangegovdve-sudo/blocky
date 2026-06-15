@@ -5,12 +5,13 @@ import (
 	"errors"
 	"time"
 
+	"log/slog"
+
 	"github.com/0xERR0R/blocky/log"
 	"github.com/0xERR0R/blocky/model"
 	"github.com/miekg/dns"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -42,7 +43,7 @@ var _ = Describe("DNSSECValidator", func() {
 		sut          *Validator
 		trustStore   *TrustAnchorStore
 		mockUpstream *mockResolver
-		logger       *logrus.Entry
+		logger       *slog.Logger
 		ctx          context.Context
 	)
 
@@ -58,7 +59,7 @@ var _ = Describe("DNSSECValidator", func() {
 		mockUpstream = &mockResolver{}
 
 		// Create logger
-		logger, _ = log.NewMockEntry()
+		logger, _ = log.NewRecorder()
 
 		// Create validator with default config values
 		sut = NewValidator(ctx, trustStore, logger, mockUpstream, 1, 10, 150, 30, 3600)
@@ -3012,7 +3013,7 @@ var _ = Describe("Additional Validator Coverage", func() {
 		Expect(err).Should(Succeed())
 
 		mockUpstream = &mockResolver{}
-		logger, _ := log.NewMockEntry()
+		logger, _ := log.NewRecorder()
 
 		sut = NewValidator(ctx, trustStore, logger, mockUpstream, 1, 10, 150, 30, 3600)
 		ctx = context.WithValue(ctx, queryBudgetKey{}, 10)
@@ -3125,14 +3126,14 @@ var _ = Describe("Additional Validator Coverage", func() {
 
 	Describe("NewValidator initialization", func() {
 		It("should initialize validator", func() {
-			logger, _ := log.NewMockEntry()
+			logger, _ := log.NewRecorder()
 			validator := NewValidator(context.Background(), trustStore, logger, mockUpstream, 1, 10, 150, 30, 3600)
 			Expect(validator).ShouldNot(BeNil())
 			Expect(validator.trustAnchors).ShouldNot(BeNil())
 		})
 
 		It("should initialize all fields correctly", func() {
-			logger, _ := log.NewMockEntry()
+			logger, _ := log.NewRecorder()
 			validator := NewValidator(ctx, trustStore, logger, mockUpstream, 2, 20, 100, 60, 7200)
 
 			Expect(validator.trustAnchors).Should(Equal(trustStore))
