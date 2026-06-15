@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"math/rand"
 	"net"
@@ -15,11 +16,11 @@ import (
 	"time"
 
 	"github.com/0xERR0R/blocky/config"
+	"github.com/0xERR0R/blocky/log"
 	"github.com/0xERR0R/blocky/model"
 	"github.com/0xERR0R/blocky/util"
 	"github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
-	"github.com/sirupsen/logrus"
 )
 
 var errArbitrarySystemResolverRequest = errors.New(
@@ -190,11 +191,11 @@ func (b *Bootstrap) dialContext(ctx context.Context, network, addr string) (net.
 		return conn, nil
 	}
 
-	ctx, logger := b.logWithFields(ctx, logrus.Fields{"network": network, "addr": addr})
+	ctx, logger := b.logWithFields(ctx, slog.String("network", network), slog.String("addr", addr))
 
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
-		logger.Errorf("dial error: %s", err)
+		logger.Error(fmt.Sprintf("dial error: %s", err))
 
 		return nil, fmt.Errorf("failed to parse dial address '%s': %w", addr, err)
 	}
@@ -215,14 +216,14 @@ func (b *Bootstrap) dialContext(ctx context.Context, network, addr string) (net.
 	// Resolve the host with the bootstrap DNS
 	ips, err := b.resolve(ctx, host, qTypes)
 	if err != nil {
-		logger.Errorf("resolve error: %s", err)
+		logger.Error(fmt.Sprintf("resolve error: %s", err))
 
 		return nil, fmt.Errorf("failed to resolve host '%s' via bootstrap DNS: %w", host, err)
 	}
 
 	ip := ips[rand.Intn(len(ips))] //nolint:gosec
 
-	logger.WithField("ip", ip).Tracef("dialing %s", host)
+	log.Trace(ctx, logger, fmt.Sprintf("dialing %s", host), slog.Any("ip", ip))
 
 	// Use the standard dialer to actually connect
 	addrWithIP := net.JoinHostPort(ip.String(), port)
@@ -298,7 +299,7 @@ func (b *Bootstrap) resolveType(ctx context.Context, hostname string, qType dns.
 type bootstrapedResolvers map[Resolver][]net.IP
 
 func newBootstrapedResolvers(
-	b *Bootstrap, cfg config.BootstrapDNS, upstreamsCfg config.Upstreams, logger *logrus.Entry,
+	b *Bootstrap, cfg config.BootstrapDNS, upstreamsCfg config.Upstreams, logger *slog.Logger,
 ) (bootstrapedResolvers, error) {
 	upstreamIPs := make(bootstrapedResolvers, len(cfg))
 
@@ -370,7 +371,7 @@ const defaultDNSPort uint16 = 53
 // OpenWrt's /tmp/resolv.conf.auto) point blocky at the right file.
 func (b *Bootstrap) addResolvFileUpstreams(
 	upstreamIPs bootstrapedResolvers, upstreamCfg config.BootstrappedUpstream,
-	upstreamsCfg config.Upstreams, logger *logrus.Entry,
+	upstreamsCfg config.Upstreams, logger *slog.Logger,
 ) error {
 	if !upstreamCfg.Upstream.IsDefault() || len(upstreamCfg.IPs) > 0 {
 		return errors.New("resolvFile cannot be combined with upstream/ips in the same entry")
@@ -406,7 +407,7 @@ func (b *Bootstrap) addResolvFileUpstreams(
 		return fmt.Errorf("resolvFile '%s': no usable nameservers", path)
 	}
 
-	logger.Infof("loaded %d bootstrap nameserver(s) from resolvFile '%s'", added, path)
+	logger.Info(fmt.Sprintf("loaded %d bootstrap nameserver(s) from resolvFile '%s'", added, path))
 
 	return nil
 }

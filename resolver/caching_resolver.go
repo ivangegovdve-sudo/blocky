@@ -17,11 +17,13 @@ import (
 	"github.com/0xERR0R/blocky/util"
 	expirationcache "github.com/0xERR0R/expiration-cache"
 
+	"log/slog"
+
 	"github.com/0xERR0R/blocky/cache/prefetching"
+	"github.com/0xERR0R/blocky/log"
 	"github.com/miekg/dns"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/sirupsen/logrus"
 )
 
 const defaultCachingCleanUpInterval = 5 * time.Second
@@ -153,7 +155,7 @@ func (r *CachingResolver) reloadCacheEntry(ctx context.Context, cacheKey string)
 	qType, domainName := util.ExtractCacheKey(cacheKey)
 	ctx, logger := r.log(ctx)
 
-	logger.Debugf("prefetching '%s' (%s)", util.Obfuscate(domainName), qType)
+	logger.Debug(fmt.Sprintf("prefetching '%s' (%s)", util.Obfuscate(domainName), qType))
 
 	req := newRequest(dns.Fqdn(domainName), qType)
 	response, err := r.next.Resolve(ctx, req)
@@ -182,10 +184,10 @@ func (r *CachingResolver) reloadCacheEntry(ctx context.Context, cacheKey string)
 }
 
 // LogConfig implements `config.Configurable`.
-func (r *CachingResolver) LogConfig(logger *logrus.Entry) {
+func (r *CachingResolver) LogConfig(logger *slog.Logger) {
 	r.cfg.LogConfig(logger)
 
-	logger.Infof("cache entries = %d", r.resultCache.TotalCount())
+	logger.Info(fmt.Sprintf("cache entries = %d", r.resultCache.TotalCount()))
 }
 
 // Resolve checks if the current query should use the cache and if the result is already in
@@ -202,7 +204,7 @@ func (r *CachingResolver) Resolve(ctx context.Context, request *model.Request) (
 	for _, question := range request.Req.Question {
 		domain := util.ExtractDomain(question)
 		cacheKey := util.GenerateCacheKey(dns.Type(question.Qtype), domain)
-		logger := logger.WithField(logFieldDomain, util.Obfuscate(domain))
+		logger := logger.With(slog.String(logFieldDomain, util.Obfuscate(domain)))
 
 		val, ttl := r.getFromCache(logger, cacheKey)
 
@@ -221,7 +223,7 @@ func (r *CachingResolver) Resolve(ctx context.Context, request *model.Request) (
 			return &model.Response{Res: val, RType: model.ResponseTypeCACHED, Reason: "CACHED NEGATIVE"}, nil
 		}
 
-		logger.WithField("next_resolver", Name(r.next)).Trace("not in cache: go to next resolver")
+		log.Trace(ctx, logger, "not in cache: go to next resolver", slog.String("next_resolver", Name(r.next)))
 		response, err = r.next.Resolve(ctx, request)
 
 		if err == nil {
@@ -235,7 +237,7 @@ func (r *CachingResolver) Resolve(ctx context.Context, request *model.Request) (
 	return response, nil
 }
 
-func (r *CachingResolver) getFromCache(logger *logrus.Entry, key string) (*dns.Msg, time.Duration) {
+func (r *CachingResolver) getFromCache(logger *slog.Logger, key string) (*dns.Msg, time.Duration) {
 	val, ttl := r.resultCache.Get(key)
 	if val == nil {
 		return nil, 0
@@ -245,7 +247,7 @@ func (r *CachingResolver) getFromCache(logger *logrus.Entry, key string) (*dns.M
 
 	err := res.Unpack(*val)
 	if err != nil {
-		logger.Error("can't unpack cached entry. Cache malformed?", err)
+		logger.Error("can't unpack cached entry. Cache malformed?", log.AttrError(err))
 
 		return nil, 0
 	}

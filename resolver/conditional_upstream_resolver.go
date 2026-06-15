@@ -3,14 +3,15 @@ package resolver
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/0xERR0R/blocky/config"
+	"github.com/0xERR0R/blocky/log"
 	"github.com/0xERR0R/blocky/model"
 	"github.com/0xERR0R/blocky/util"
 
 	"github.com/miekg/dns"
-	"github.com/sirupsen/logrus"
 )
 
 // ConditionalUpstreamResolver delegates DNS question to other DNS resolver dependent on domain name in question
@@ -109,7 +110,7 @@ func (r *ConditionalUpstreamResolver) Resolve(ctx context.Context, request *mode
 	}
 
 	if !resolved {
-		logger.WithField("next_resolver", Name(r.next)).Trace("go to next resolver")
+		log.Trace(ctx, logger, "go to next resolver", slog.String("next_resolver", Name(r.next)))
 		response, err = r.next.Resolve(ctx, request)
 		if err != nil {
 			return nil, err
@@ -152,11 +153,10 @@ func (r *ConditionalUpstreamResolver) internalResolve(ctx context.Context, reso 
 		answer = util.Obfuscate(util.AnswerToString(response.Res.Answer))
 	}
 
-	logger.WithFields(logrus.Fields{
-		logFieldAnswer:   answer,
-		logFieldDomain:   util.Obfuscate(do),
-		logFieldUpstream: reso,
-	}).Debugf("received response from conditional upstream")
+	logger.Debug("received response from conditional upstream",
+		slog.String(logFieldAnswer, answer),
+		slog.String(logFieldDomain, util.Obfuscate(do)),
+		slog.Any(logFieldUpstream, reso))
 
 	return response, nil
 }

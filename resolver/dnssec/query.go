@@ -47,7 +47,7 @@ func (v *Validator) queryRecords(
 ) (context.Context, *dns.Msg, error) {
 	// Check query budget (DoS protection)
 	if err := v.consumeQueryBudget(ctx); err != nil {
-		v.logger.Warnf("Query budget exhausted while querying %s (type %d): %v", domain, qtype, err)
+		v.logger.Warn(fmt.Sprintf("Query budget exhausted while querying %s (type %d): %v", domain, qtype, err))
 
 		return ctx, nil, err
 	}

@@ -199,7 +199,7 @@ func (r *quicUpstreamClient) getConnection(ctx context.Context, addr string) (*q
 		case <-connCtx.Done():
 			// Connection is closed; log the cause before discarding.
 			if cause := context.Cause(connCtx); cause != nil { //nolint:contextcheck
-				log.Log().Debugf("QUIC connection to %s closed: %v (%T)", addr, cause, cause)
+				log.Log().Debug(fmt.Sprintf("QUIC connection to %s closed: %v (%T)", addr, cause, cause))
 			}
 
 			r.conn = nil

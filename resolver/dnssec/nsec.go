@@ -3,6 +3,7 @@ package dnssec
 // This file contains NSEC-based denial of existence validation per RFC 4035 §5.4.
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 
@@ -38,13 +39,13 @@ func (v *Validator) validateNSECNXDOMAIN(nsecRecords []*dns.NSEC, qname string) 
 	// Find NSEC that covers the query name
 	for _, nsec := range nsecRecords {
 		if v.nsecCoversName(nsec, qname) {
-			v.logger.Debugf("NSEC covers NXDOMAIN for %s: %s -> %s", qname, nsec.Header().Name, nsec.NextDomain)
+			v.logger.Debug(fmt.Sprintf("NSEC covers NXDOMAIN for %s: %s -> %s", qname, nsec.Header().Name, nsec.NextDomain))
 
 			return ValidationResultSecure
 		}
 	}
 
-	v.logger.Warnf("No NSEC record covers NXDOMAIN for %s", qname)
+	v.logger.Warn(fmt.Sprintf("No NSEC record covers NXDOMAIN for %s", qname))
 
 	return ValidationResultBogus
 }
@@ -59,18 +60,18 @@ func (v *Validator) validateNSECNODATA(nsecRecords []*dns.NSEC, qname string, qt
 		if nsecName == qname {
 			// NSEC matches the query name - check if it proves type doesn't exist
 			if !v.nsecHasType(nsec, qtype) {
-				v.logger.Debugf("NSEC proves NODATA for %s type %d", qname, qtype)
+				v.logger.Debug(fmt.Sprintf("NSEC proves NODATA for %s type %d", qname, qtype))
 
 				return ValidationResultSecure
 			}
 			// Type exists according to NSEC - this is bogus
-			v.logger.Warnf("NSEC at %s claims type %d exists but no answer returned", qname, qtype)
+			v.logger.Warn(fmt.Sprintf("NSEC at %s claims type %d exists but no answer returned", qname, qtype))
 
 			return ValidationResultBogus
 		}
 	}
 
-	v.logger.Warnf("No matching NSEC record found for NODATA proof: %s", qname)
+	v.logger.Warn(fmt.Sprintf("No matching NSEC record found for NODATA proof: %s", qname))
 
 	return ValidationResultBogus
 }

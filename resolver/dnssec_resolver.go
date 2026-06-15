@@ -56,8 +56,8 @@ func NewDNSSECResolver(ctx context.Context, cfg config.DNSSEC, upstream Resolver
 			cfg.ClockSkewToleranceSec,
 		)
 
-		logger.Infof("DNSSEC resolver initialized with %d root trust anchor(s)",
-			len(trustAnchors.GetRootTrustAnchors()))
+		logger.Info(fmt.Sprintf("DNSSEC resolver initialized with %d root trust anchor(s)",
+			len(trustAnchors.GetRootTrustAnchors())))
 	}
 
 	return r, nil
@@ -77,11 +77,11 @@ func (r *DNSSECResolver) Resolve(ctx context.Context, request *model.Request) (*
 			if opt.UDPSize() < ednsUDPSize {
 				opt.SetUDPSize(ednsUDPSize)
 			}
-			logger.Debugf("DNSSEC DO bit set for query (existing EDNS0): %s", request.Req.Question[0].Name)
+			logger.Debug(fmt.Sprintf("DNSSEC DO bit set for query (existing EDNS0): %s", request.Req.Question[0].Name))
 		} else {
 			// No EDNS0 present - add it with DO bit
 			request.Req.SetEdns0(ednsUDPSize, true)
-			logger.Debugf("DNSSEC DO bit set for query (new EDNS0): %s", request.Req.Question[0].Name)
+			logger.Debug(fmt.Sprintf("DNSSEC DO bit set for query (new EDNS0): %s", request.Req.Question[0].Name))
 		}
 	}
 
@@ -95,28 +95,28 @@ func (r *DNSSECResolver) Resolve(ctx context.Context, request *model.Request) (*
 	if r.cfg.Validate && r.validator != nil && len(request.Req.Question) > 0 {
 		result := r.validator.ValidateResponse(ctx, response.Res, request.Req.Question[0])
 
-		logger.Debugf("DNSSEC validation result for %s: %s",
-			request.Req.Question[0].Name, result.String())
+		logger.Debug(fmt.Sprintf("DNSSEC validation result for %s: %s",
+			request.Req.Question[0].Name, result.String()))
 
 		switch result {
 		case dnssec.ValidationResultBogus:
 			// Invalid DNSSEC - return SERVFAIL
-			logger.Warnf("DNSSEC validation failed for %s - returning SERVFAIL",
-				request.Req.Question[0].Name)
+			logger.Warn(fmt.Sprintf("DNSSEC validation failed for %s - returning SERVFAIL",
+				request.Req.Question[0].Name))
 
 			return createServFailResponseDNSSEC(request, "DNSSEC validation failed: bogus signatures"), nil
 
 		case dnssec.ValidationResultSecure:
 			// Valid DNSSEC - set AD flag
 			response.Res.AuthenticatedData = true
-			logger.Debugf("DNSSEC validation succeeded for %s - AD flag set",
-				request.Req.Question[0].Name)
+			logger.Debug(fmt.Sprintf("DNSSEC validation succeeded for %s - AD flag set",
+				request.Req.Question[0].Name))
 
 		case dnssec.ValidationResultInsecure, dnssec.ValidationResultIndeterminate:
 			// No DNSSEC or cannot validate - clear AD flag
 			response.Res.AuthenticatedData = false
-			logger.Debugf("DNSSEC validation result %s for %s - AD flag cleared",
-				result.String(), request.Req.Question[0].Name)
+			logger.Debug(fmt.Sprintf("DNSSEC validation result %s for %s - AD flag cleared",
+				result.String(), request.Req.Question[0].Name))
 		}
 	}
 

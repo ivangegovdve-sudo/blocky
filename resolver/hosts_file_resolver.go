@@ -3,17 +3,18 @@ package resolver
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 
 	"github.com/0xERR0R/blocky/config"
 	"github.com/0xERR0R/blocky/lists"
 	"github.com/0xERR0R/blocky/lists/parsers"
+	"github.com/0xERR0R/blocky/log"
 	"github.com/0xERR0R/blocky/model"
 	"github.com/0xERR0R/blocky/util"
 	"github.com/ThinkChaos/parcour"
 	"github.com/ThinkChaos/parcour/jobgroup"
 	"github.com/miekg/dns"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -47,7 +48,7 @@ func NewHostsFileResolver(ctx context.Context,
 
 	err := cfg.Loading.StartPeriodicRefresh(ctx, r.loadSources, func(err error) {
 		_, logger := r.log(ctx)
-		logger.WithError(err).Errorf("could not load hosts files")
+		logger.Error("could not load hosts files", log.AttrError(err))
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to start periodic refresh for hosts files: %w", err)
@@ -57,10 +58,10 @@ func NewHostsFileResolver(ctx context.Context,
 }
 
 // LogConfig implements `config.Configurable`.
-func (r *HostsFileResolver) LogConfig(logger *logrus.Entry) {
+func (r *HostsFileResolver) LogConfig(logger *slog.Logger) {
 	r.cfg.LogConfig(logger)
 
-	logger.Infof("cache entries = %d", r.hosts.len())
+	logger.Info(fmt.Sprintf("cache entries = %d", r.hosts.len()))
 }
 
 func (r *HostsFileResolver) handleReverseDNS(request *model.Request) *model.Response {
@@ -144,15 +145,14 @@ func (r *HostsFileResolver) Resolve(ctx context.Context, request *model.Request)
 
 	response := r.resolve(question, domain)
 	if response != nil {
-		logger.WithFields(logrus.Fields{
-			logFieldAnswer: util.Obfuscate(util.AnswerToString(response)),
-			logFieldDomain: util.Obfuscate(domain),
-		}).Debugf("returning hosts file entry")
+		logger.Debug("returning hosts file entry",
+			slog.String(logFieldAnswer, util.Obfuscate(util.AnswerToString(response))),
+			slog.String(logFieldDomain, util.Obfuscate(domain)))
 
 		return model.NewResponseWithAnswers(request, response, model.ResponseTypeHOSTSFILE, "HOSTS FILE"), nil
 	}
 
-	logger.WithField("next_resolver", Name(r.next)).Trace("go to next resolver")
+	log.Trace(ctx, logger, "go to next resolver", slog.String("next_resolver", Name(r.next)))
 
 	return r.next.Resolve(ctx, request)
 }
@@ -238,7 +238,7 @@ func (r *HostsFileResolver) parseFile(
 	p.OnErr(func(err error) {
 		_, logger := r.log(ctx)
 
-		logger.Warnf("error parsing %s: %s, trying to continue", opener, err)
+		logger.Warn(fmt.Sprintf("error parsing %s: %s, trying to continue", opener, err))
 	})
 
 	return parsers.ForEach[*HostsFileEntry](ctx, p, func(entry *HostsFileEntry) error {

@@ -22,8 +22,9 @@ import (
 	"github.com/0xERR0R/blocky/model"
 	"github.com/0xERR0R/blocky/util"
 
+	"log/slog"
+
 	"github.com/miekg/dns"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -61,14 +62,13 @@ func (c upstreamConfig) IsEnabled() bool {
 }
 
 // LogConfig implements `config.Configurable`.
-func (c upstreamConfig) LogConfig(logger *logrus.Entry) {
+func (c upstreamConfig) LogConfig(logger *slog.Logger) {
 	if len(c.CertificateFingerprints) > 0 {
-		logger.WithFields(logrus.Fields{
-			"cert_pinning":  true,
-			"pinned_hashes": len(c.CertificateFingerprints),
-		}).Info(c.Upstream)
+		logger.Info(fmt.Sprintf("%s", c.Upstream),
+			slog.Bool("cert_pinning", true),
+			slog.Int("pinned_hashes", len(c.CertificateFingerprints)))
 	} else {
-		logger.Info(c.Upstream)
+		logger.Info(fmt.Sprintf("%s", c.Upstream))
 	}
 }
 
@@ -197,8 +197,7 @@ func createUpstreamClient(cfg upstreamConfig) upstreamClient {
 		}
 
 	default:
-		log.Log().Fatalf("invalid protocol %s", cfg.Net)
-		panic("unreachable")
+		panic(fmt.Sprintf("invalid protocol %s", cfg.Net))
 	}
 }
 
@@ -353,7 +352,7 @@ func NewUpstreamResolver(
 	onErr := func(err error) {
 		_, logger := r.log(ctx)
 
-		logger.WithError(err).Warn("initial resolver test failed")
+		logger.Warn("initial resolver test failed", log.AttrError(err))
 	}
 
 	err := cfg.Init.Strategy.Do(ctx, r.testResolve, onErr)
@@ -385,10 +384,8 @@ func (r UpstreamResolver) Upstream() config.Upstream {
 	return r.cfg.Upstream
 }
 
-func (r *UpstreamResolver) log(ctx context.Context) (context.Context, *logrus.Entry) {
-	return r.logWithFields(ctx, logrus.Fields{
-		logFieldUpstream: r.cfg.String(),
-	})
+func (r *UpstreamResolver) log(ctx context.Context) (context.Context, *slog.Logger) {
+	return r.logWithFields(ctx, slog.String(logFieldUpstream, r.cfg.String()))
 }
 
 // testResolve sends a test query to verify the upstream is reachable and working
@@ -443,12 +440,11 @@ func (r *UpstreamResolver) Resolve(ctx context.Context, request *model.Request) 
 		retry.LastErrorOnly(true),
 		retry.RetryIf(isTimeout),
 		retry.OnRetry(func(n uint, err error) {
-			logger.WithFields(logrus.Fields{
-				logFieldUpstream: r.cfg.String(),
-				"upstream_ip":    ip.String(),
-				"question":       util.QuestionToString(request.Req.Question),
-				"attempt":        fmt.Sprintf("%d/%d", n+1, retryAttempts),
-			}).Debugf("%s, retrying...", err)
+			logger.Debug(fmt.Sprintf("%s, retrying...", err),
+				slog.String(logFieldUpstream, r.cfg.String()),
+				slog.String("upstream_ip", ip.String()),
+				slog.String("question", util.QuestionToString(request.Req.Question)),
+				slog.String("attempt", fmt.Sprintf("%d/%d", n+1, retryAttempts)))
 
 			ips.Next()
 		}))
@@ -460,17 +456,16 @@ func (r *UpstreamResolver) Resolve(ctx context.Context, request *model.Request) 
 }
 
 func (r *UpstreamResolver) logResponse(
-	logger *logrus.Entry, request *model.Request, resp *dns.Msg, ip net.IP, rtt time.Duration,
+	logger *slog.Logger, request *model.Request, resp *dns.Msg, ip net.IP, rtt time.Duration,
 ) {
-	logger.WithFields(logrus.Fields{
-		logFieldAnswer:     util.Obfuscate(util.AnswerToString(resp.Answer)),
-		"return_code":      dns.RcodeToString[resp.Rcode],
-		logFieldUpstream:   r.cfg.String(),
-		"upstream_ip":      ip.String(),
-		logFieldProtocol:   request.Protocol,
-		"net":              r.cfg.Net,
-		"response_time_ms": rtt.Milliseconds(),
-	}).Debugf("received response from upstream")
+	logger.Debug("received response from upstream",
+		slog.String(logFieldAnswer, util.Obfuscate(util.AnswerToString(resp.Answer))),
+		slog.String("return_code", dns.RcodeToString[resp.Rcode]),
+		slog.String(logFieldUpstream, r.cfg.String()),
+		slog.String("upstream_ip", ip.String()),
+		slog.Any(logFieldProtocol, request.Protocol),
+		slog.Any("net", r.cfg.Net),
+		slog.Int64("response_time_ms", rtt.Milliseconds()))
 }
 
 func isTimeout(err error) bool {

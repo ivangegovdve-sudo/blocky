@@ -1,13 +1,13 @@
 package resolver
 
 import (
+	"fmt"
 	"net"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/0xERR0R/blocky/config"
-	"github.com/0xERR0R/blocky/util"
 	"github.com/miekg/dns"
 	"github.com/onsi/ginkgo/v2"
 )
@@ -32,7 +32,9 @@ func (t *MockUDPUpstreamServer) WithAnswerRR(answers ...string) *MockUDPUpstream
 
 		for _, a := range answers {
 			rr, err := dns.NewRR(a)
-			util.FatalOnError("can't create RR", err)
+			if err != nil {
+				panic(fmt.Sprintf("can't create RR: %v", err))
+			}
 
 			msg.Answer = append(msg.Answer, rr)
 		}
@@ -99,10 +101,14 @@ func (t *MockUDPUpstreamServer) Close() {
 
 func createConnection() *net.UDPConn {
 	a, err := net.ResolveUDPAddr("udp4", ":0")
-	util.FatalOnError("can't resolve address: ", err)
+	if err != nil {
+		panic(fmt.Sprintf("can't resolve address: %v", err))
+	}
 
 	ln, err := net.ListenUDP("udp4", a)
-	util.FatalOnError("can't create connection: ", err)
+	if err != nil {
+		panic(fmt.Sprintf("can't create connection: %v", err))
+	}
 
 	return ln
 }
@@ -113,8 +119,9 @@ func (t *MockUDPUpstreamServer) Start() config.Upstream {
 	ladr := ln.LocalAddr().String()
 	host := strings.Split(ladr, ":")[0]
 	p, err := config.ConvertPort(strings.Split(ladr, ":")[1])
-
-	util.FatalOnError("can't convert port: ", err)
+	if err != nil {
+		panic(fmt.Sprintf("can't convert port: %v", err))
+	}
 
 	port := p
 	t.ln = ln
@@ -135,8 +142,9 @@ func (t *MockUDPUpstreamServer) Start() config.Upstream {
 				defer ginkgo.GinkgoRecover()
 				msg := new(dns.Msg)
 				err = msg.Unpack(buffer[0:n])
-
-				util.FatalOnError("can't deserialize message: ", err)
+				if err != nil {
+					panic(fmt.Sprintf("can't deserialize message: %v", err))
+				}
 
 				response := t.answerFn(msg)
 
@@ -156,7 +164,9 @@ func (t *MockUDPUpstreamServer) Start() config.Upstream {
 				}
 
 				b, err := response.Pack()
-				util.FatalOnError("can't serialize message: ", err)
+				if err != nil {
+					panic(fmt.Sprintf("can't serialize message: %v", err))
+				}
 
 				_, _ = ln.WriteToUDP(b, addr)
 			}()

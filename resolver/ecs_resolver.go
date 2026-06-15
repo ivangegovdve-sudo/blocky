@@ -3,13 +3,13 @@ package resolver
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 
 	"github.com/0xERR0R/blocky/config"
 	"github.com/0xERR0R/blocky/model"
 	"github.com/0xERR0R/blocky/util"
 	"github.com/miekg/dns"
-	"github.com/sirupsen/logrus"
 )
 
 // https://www.rfc-editor.org/rfc/rfc7871.html#section-6
@@ -57,7 +57,7 @@ func (r *ECSResolver) Resolve(ctx context.Context, request *model.Request) (*mod
 		// Set the client IP from the Edns0 subnet option if the option is enabled and the correct subnet mask is set
 		if r.cfg.UseAsClient && so != nil && ((so.Family == ecsFamilyIPv4 && so.SourceNetmask == ecsMaskIPv4) ||
 			(so.Family == ecsFamilyIPv6 && so.SourceNetmask == ecsMaskIPv6)) {
-			logger.Debugf("using request's edns0 address as internal client IP: %s", so.Address)
+			logger.Debug(fmt.Sprintf("using request's edns0 address as internal client IP: %s", so.Address))
 			request.ClientIP = so.Address
 		}
 
@@ -79,7 +79,7 @@ func (r *ECSResolver) Resolve(ctx context.Context, request *model.Request) (*mod
 
 // setSubnet appends the subnet information to the request as EDNS0 option
 // if the client IP is IPv4 or IPv6 and the corresponding mask is set in the configuration
-func (r *ECSResolver) setSubnet(so *dns.EDNS0_SUBNET, request *model.Request, logger *logrus.Entry) {
+func (r *ECSResolver) setSubnet(so *dns.EDNS0_SUBNET, request *model.Request, logger *slog.Logger) {
 	var subIP net.IP
 	if so != nil && r.cfg.Forward && so.Address != nil {
 		subIP = so.Address
@@ -100,7 +100,7 @@ func (r *ECSResolver) setSubnet(so *dns.EDNS0_SUBNET, request *model.Request, lo
 	}
 
 	if edsOption != nil {
-		logger.Debugf("set edns0 subnet option address: %s", edsOption.Address)
+		logger.Debug(fmt.Sprintf("set edns0 subnet option address: %s", edsOption.Address))
 		util.SetEdns0Option(request.Req, edsOption)
 	}
 }

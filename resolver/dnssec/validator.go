@@ -45,6 +45,8 @@ package dnssec
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -55,7 +57,6 @@ import (
 	expirationcache "github.com/0xERR0R/expiration-cache"
 	"github.com/miekg/dns"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sirupsen/logrus"
 )
 
 const ednsUDPSize = 4096 // EDNS UDP buffer size for DNSSEC queries
@@ -81,7 +82,7 @@ type ValidationResult int
 // Validator validates DNSSEC signatures and chains of trust
 type Validator struct {
 	trustAnchors          *TrustAnchorStore
-	logger                *logrus.Entry
+	logger                *slog.Logger
 	upstream              Resolver // Used to query for DNSKEY and DS records
 	validationCache       cache.ExpiringCache[ValidationResult]
 	nsec3HashCache        sync.Map // Cache for NSEC3 hash computations: key = "name:alg:salt:iterations"
@@ -143,7 +144,7 @@ func (v *Validator) initializeMetrics() {
 func NewValidator(
 	ctx context.Context,
 	trustAnchors *TrustAnchorStore,
-	logger *logrus.Entry,
+	logger *slog.Logger,
 	upstream Resolver,
 	cacheExpirationHours uint,
 	maxChainDepth uint,
@@ -213,7 +214,7 @@ func (v *Validator) ValidateResponse(
 	question dns.Question,
 ) ValidationResult {
 	start := time.Now()
-	v.logger.Debugf("DNSSEC validation requested for %s", question.Name)
+	v.logger.Debug(fmt.Sprintf("DNSSEC validation requested for %s", question.Name))
 
 	// Initialize query budget for this validation request (DoS protection)
 	ctx = context.WithValue(ctx, queryBudgetKey{}, int(v.maxUpstreamQueries))
@@ -223,7 +224,7 @@ func (v *Validator) ValidateResponse(
 	// Dispatch to appropriate validator based on response type
 	switch {
 	case !v.hasAnySignatures(response):
-		v.logger.Debugf("No RRSIG records found for %s - zone is unsigned", question.Name)
+		v.logger.Debug(fmt.Sprintf("No RRSIG records found for %s - zone is unsigned", question.Name))
 		result = ValidationResultInsecure
 	case len(response.Answer) > 0:
 		result = v.validateAnswer(ctx, response, question)
@@ -253,9 +254,9 @@ func (v *Validator) validateAnswer(
 ) ValidationResult {
 	result := v.validateRRsets(ctx, response.Answer, question.Name, response.Ns, question.Name)
 	if result != ValidationResultSecure {
-		v.logger.Warnf("Answer validation failed for %s: %s", question.Name, result.String())
+		v.logger.Warn(fmt.Sprintf("Answer validation failed for %s: %s", question.Name, result.String()))
 	} else {
-		v.logger.Debugf("DNSSEC validation succeeded for %s", question.Name)
+		v.logger.Debug(fmt.Sprintf("DNSSEC validation succeeded for %s", question.Name))
 	}
 
 	return result
@@ -281,16 +282,16 @@ func (v *Validator) validateNegativeResponse(
 ) ValidationResult {
 	nsSigs := extractRRSIGs(response.Ns)
 	if len(nsSigs) == 0 {
-		v.logger.Debugf("No signatures in authority section for denial of existence: %s", question.Name)
+		v.logger.Debug(fmt.Sprintf("No signatures in authority section for denial of existence: %s", question.Name))
 
 		return ValidationResultInsecure
 	}
 
 	result := v.validateDenialOfExistence(ctx, response, question)
 	if result != ValidationResultSecure {
-		v.logger.Warnf("Denial of existence validation failed for %s: %s", question.Name, result.String())
+		v.logger.Warn(fmt.Sprintf("Denial of existence validation failed for %s: %s", question.Name, result.String()))
 	} else {
-		v.logger.Debugf("Denial of existence validated for %s", question.Name)
+		v.logger.Debug(fmt.Sprintf("Denial of existence validated for %s", question.Name))
 	}
 
 	return result
@@ -316,7 +317,7 @@ func (v *Validator) validateAuthorityOrAdditional(
 
 	result := v.validateRRsets(ctx, sectionsToValidate, question.Name, response.Ns, question.Name)
 	if result != ValidationResultSecure {
-		v.logger.Warnf("Authority/Additional validation failed for %s: %s", question.Name, result.String())
+		v.logger.Warn(fmt.Sprintf("Authority/Additional validation failed for %s: %s", question.Name, result.String()))
 	}
 
 	return result
@@ -366,7 +367,7 @@ func (v *Validator) validateRRsets(
 	// Extract all RRSIGs
 	sigs := extractRRSIGs(rrs)
 	if len(sigs) == 0 {
-		v.logger.Debugf("No RRSIGs found in section for %s", domain)
+		v.logger.Debug(fmt.Sprintf("No RRSIGs found in section for %s", domain))
 
 		return ValidationResultInsecure
 	}
@@ -485,8 +486,9 @@ func (v *Validator) determineFinalValidationResult(
 	// Check if any signature verified with insecure chain
 	// This takes precedence over other failure types
 	if hasInsecureChain {
-		v.logger.Debugf("RRSIG verified for %s but chain of trust is insecure (no DS in parent) - treating as Insecure",
-			domain)
+		v.logger.Debug(fmt.Sprintf(
+			"RRSIG verified for %s but chain of trust is insecure (no DS in parent) - treating as Insecure",
+			domain))
 
 		return ValidationResultInsecure
 	}
@@ -494,16 +496,16 @@ func (v *Validator) determineFinalValidationResult(
 	// All RRSIGs failed - determine result based on failure types
 	// Per RFC 4035 §2.2: Treat unsupported algorithms as Insecure only if NO other errors occurred
 	if hasUnsupportedSignature && !hasOtherFailure {
-		v.logger.Warnf(
+		v.logger.Warn(fmt.Sprintf(
 			"All RRSIG signatures for %s use unsupported algorithms - treating as Insecure per RFC 4035 §2.2",
-			domain)
+			domain))
 
 		return ValidationResultInsecure
 	}
 
 	// At least one signature failed validation (not just unsupported) - this is Bogus
-	v.logger.Warnf("All RRSIG verification attempts failed for %s (tried %d signatures), last error: %v",
-		domain, sigCount, lastErr)
+	v.logger.Warn(fmt.Sprintf("All RRSIG verification attempts failed for %s (tried %d signatures), last error: %v",
+		domain, sigCount, lastErr))
 
 	return ValidationResultBogus
 }
@@ -521,14 +523,16 @@ func (v *Validator) tryVerifyWithRRSIG(
 	// RFC 4035 §2.2: For DNSKEY RRsets, the signer must equal the owner (self-signed at zone apex)
 	if rrType == dns.TypeDNSKEY {
 		if signerName != rrsetName {
-			v.logger.Debugf("Skipping RRSIG: DNSKEY signer %s must equal owner %s (RFC 4035 §2.2)", signerName, rrsetName)
+			v.logger.Debug(fmt.Sprintf(
+				"Skipping RRSIG: DNSKEY signer %s must equal owner %s (RFC 4035 §2.2)", signerName, rrsetName))
 
 			return false, nil
 		}
 	} else {
 		// For non-DNSKEY RRsets, signer must be a parent of the RRset owner
 		if !validateSignerName(signerName, rrsetName) {
-			v.logger.Debugf("Skipping RRSIG: signer name %s is not a parent of RRset owner %s", signerName, rrsetName)
+			v.logger.Debug(fmt.Sprintf(
+				"Skipping RRSIG: signer name %s is not a parent of RRset owner %s", signerName, rrsetName))
 
 			return false, nil
 		}
@@ -537,18 +541,18 @@ func (v *Validator) tryVerifyWithRRSIG(
 	// Query and match DNSKEY
 	_, matchingKey, err := v.queryAndMatchDNSKEY(ctx, signerName, matchingSig.KeyTag, matchingSig.Algorithm)
 	if err != nil {
-		v.logger.Debugf("Skipping RRSIG (algorithm=%d, keytag=%d): DNSKEY query/match failed: %v",
-			matchingSig.Algorithm, matchingSig.KeyTag, err)
+		v.logger.Debug(fmt.Sprintf("Skipping RRSIG (algorithm=%d, keytag=%d): DNSKEY query/match failed: %v",
+			matchingSig.Algorithm, matchingSig.KeyTag, err))
 
 		return false, err
 	}
 
 	// Check for unsupported RSA exponents (Go crypto limitation)
 	if hasUnsupportedRSAExponent(matchingKey) {
-		v.logger.Debugf(
+		v.logger.Debug(fmt.Sprintf(
 			"DNSKEY for %s (algorithm=%d, keytag=%d) has unsupported RSA exponent "+
 				"(exceeds 2^31-1, Go crypto limitation) - treating zone as Insecure per RFC 4035 §2.2",
-			domain, matchingSig.Algorithm, matchingSig.KeyTag)
+			domain, matchingSig.Algorithm, matchingSig.KeyTag))
 
 		return false, errUnsupportedRSAExponent
 	}
@@ -560,8 +564,8 @@ func (v *Validator) tryVerifyWithRRSIG(
 	// Per RFC 5155 §6: NSEC3 Opt-Out allows unsigned delegations, but if the zone IS signed
 	// (has RRSIG records), we should still validate those signatures cryptographically
 	if chainResult == ValidationResultBogus || chainResult == ValidationResultIndeterminate {
-		v.logger.Debugf("Skipping RRSIG (algorithm=%d, keytag=%d): chain of trust validation failed: %s",
-			matchingSig.Algorithm, matchingSig.KeyTag, chainResult.String())
+		v.logger.Debug(fmt.Sprintf("Skipping RRSIG (algorithm=%d, keytag=%d): chain of trust validation failed: %s",
+			matchingSig.Algorithm, matchingSig.KeyTag, chainResult.String()))
 
 		return false, nil
 	}
@@ -577,8 +581,8 @@ func (v *Validator) verifyAndReturnResult(
 ) (bool, error) {
 	// Verify the signature cryptographically (even if chain is Insecure)
 	if err := v.verifyRRSIG(rrset, matchingSig, matchingKey, nsRecords, qname); err != nil {
-		v.logger.Debugf("RRSIG verification failed for algorithm=%d, keytag=%d: %v (trying next RRSIG if available)",
-			matchingSig.Algorithm, matchingSig.KeyTag, err)
+		v.logger.Debug(fmt.Sprintf("RRSIG verification failed for algorithm=%d, keytag=%d: %v (trying next RRSIG if available)",
+			matchingSig.Algorithm, matchingSig.KeyTag, err))
 
 		return false, err
 	}
@@ -587,15 +591,15 @@ func (v *Validator) verifyAndReturnResult(
 	if chainResult == ValidationResultInsecure {
 		// Signature is cryptographically valid, but chain of trust to root cannot be established
 		// This happens with NSEC3 Opt-Out when parent has no DS but child is signed
-		v.logger.Debugf("RRSIG verified for %s (algorithm=%d, keytag=%d), but chain is Insecure",
-			domain, matchingSig.Algorithm, matchingSig.KeyTag)
+		v.logger.Debug(fmt.Sprintf("RRSIG verified for %s (algorithm=%d, keytag=%d), but chain is Insecure",
+			domain, matchingSig.Algorithm, matchingSig.KeyTag))
 
 		return true, errInsecureChain
 	}
 
 	// Verification succeeded with full chain of trust!
-	v.logger.Debugf("Successfully verified RRset for %s with algorithm=%d, keytag=%d",
-		domain, matchingSig.Algorithm, matchingSig.KeyTag)
+	v.logger.Debug(fmt.Sprintf("Successfully verified RRset for %s with algorithm=%d, keytag=%d",
+		domain, matchingSig.Algorithm, matchingSig.KeyTag))
 
 	return true, nil
 }
@@ -608,20 +612,20 @@ func (v *Validator) handleMissingRRSIG(ctx context.Context, rrType uint16, rrset
 
 	if zoneSecurityStatus == ValidationResultInsecure {
 		// Zone is unsigned/insecure - unsigned RRsets are acceptable per RFC 4035 §5.2
-		v.logger.Debugf("RRset type %d in %s has no RRSIG, but zone is insecure - acceptable", rrType, rrsetName)
+		v.logger.Debug(fmt.Sprintf("RRset type %d in %s has no RRSIG, but zone is insecure - acceptable", rrType, rrsetName))
 
 		return ValidationResultInsecure
 	}
 
 	if zoneSecurityStatus == ValidationResultIndeterminate {
 		// Cannot determine zone security status - treat conservatively as Indeterminate
-		v.logger.Warnf("Cannot determine security status for zone of %s - treating as indeterminate", rrsetName)
+		v.logger.Warn(fmt.Sprintf("Cannot determine security status for zone of %s - treating as indeterminate", rrsetName))
 
 		return ValidationResultIndeterminate
 	}
 
 	// Zone is secure (has DS records) but RRSIG missing - this is Bogus
-	v.logger.Warnf("No RRSIG found for RRset type %d in %s (zone is secure)", rrType, rrsetName)
+	v.logger.Warn(fmt.Sprintf("No RRSIG found for RRset type %d in %s (zone is secure)", rrType, rrsetName))
 
 	return ValidationResultBogus
 }
@@ -636,7 +640,7 @@ func (v *Validator) checkZoneSecurityStatus(ctx context.Context, domain string) 
 
 	// Check cache first - we may have already validated this zone
 	if cached, found := v.getCachedValidation(domain); found {
-		v.logger.Debugf("Using cached security status for %s: %s", domain, cached.String())
+		v.logger.Debug(fmt.Sprintf("Using cached security status for %s: %s", domain, cached.String()))
 
 		return cached
 	}
@@ -646,7 +650,7 @@ func (v *Validator) checkZoneSecurityStatus(ctx context.Context, domain string) 
 	if parentDomain == "" {
 		// Root or TLD with no parent - treat as insecure for this check
 		// (actual validation would go through trust anchors)
-		v.logger.Debugf("Domain %s has no parent for DS lookup", domain)
+		v.logger.Debug(fmt.Sprintf("Domain %s has no parent for DS lookup", domain))
 
 		return ValidationResultInsecure
 	}
@@ -654,7 +658,7 @@ func (v *Validator) checkZoneSecurityStatus(ctx context.Context, domain string) 
 	// Query DS records for this domain from the parent zone
 	ctx, dsResponse, err := v.queryRecords(ctx, domain, dns.TypeDS)
 	if err != nil {
-		v.logger.Debugf("DS query failed for %s: %v", domain, err)
+		v.logger.Debug(fmt.Sprintf("DS query failed for %s: %v", domain, err))
 
 		return ValidationResultIndeterminate
 	}
@@ -667,7 +671,7 @@ func (v *Validator) checkZoneSecurityStatus(ctx context.Context, domain string) 
 	}
 
 	// DS records exist - zone is signed (secure)
-	v.logger.Debugf("Zone %s is secure (DS records exist: %d)", domain, len(dsRecords))
+	v.logger.Debug(fmt.Sprintf("Zone %s is secure (DS records exist: %d)", domain, len(dsRecords)))
 	// Don't cache as Secure here - full validation might fail
 	// Just return Secure to indicate the zone should have signatures
 
@@ -684,7 +688,7 @@ func (v *Validator) handleNoDSRecords(
 
 	if hasNSEC || hasNSEC3 {
 		// Authenticated denial of DS existence - zone is insecure (unsigned)
-		v.logger.Debugf("Zone %s is insecure (no DS, with NSEC/NSEC3 proof)", domain)
+		v.logger.Debug(fmt.Sprintf("Zone %s is insecure (no DS, with NSEC/NSEC3 proof)", domain))
 		result := ValidationResultInsecure
 		v.setCachedValidation(domain, result)
 
@@ -693,13 +697,13 @@ func (v *Validator) handleNoDSRecords(
 
 	// No DS and no proof - this might be a non-delegation (e.g., subdomain in parent zone)
 	// Try walking up to parent zone
-	v.logger.Debugf("No DS or proof for %s, checking parent zone", domain)
+	v.logger.Debug(fmt.Sprintf("No DS or proof for %s, checking parent zone", domain))
 
 	if parentDomain != "" {
 		parentResult := v.checkZoneSecurityStatus(ctx, parentDomain)
 		if parentResult == ValidationResultInsecure {
 			// Parent zone is unsigned, so this name is also unsigned
-			v.logger.Debugf("Parent zone %s is insecure, so %s is also insecure", parentDomain, domain)
+			v.logger.Debug(fmt.Sprintf("Parent zone %s is insecure, so %s is also insecure", parentDomain, domain))
 			result := ValidationResultInsecure
 			v.setCachedValidation(domain, result)
 
@@ -707,7 +711,7 @@ func (v *Validator) handleNoDSRecords(
 		}
 		if parentResult == ValidationResultSecure {
 			// Parent is signed, so this non-delegation should have been signed too
-			v.logger.Debugf("Parent zone %s is secure but %s has no DS - treating as indeterminate", parentDomain, domain)
+			v.logger.Debug(fmt.Sprintf("Parent zone %s is secure but %s has no DS - treating as indeterminate", parentDomain, domain))
 			result := ValidationResultIndeterminate
 			v.setCachedValidation(domain, result)
 
@@ -716,7 +720,7 @@ func (v *Validator) handleNoDSRecords(
 	}
 
 	// No DS and no proof - indeterminate
-	v.logger.Debugf("Zone %s security status indeterminate (no DS, no proof)", domain)
+	v.logger.Debug(fmt.Sprintf("Zone %s security status indeterminate (no DS, no proof)", domain))
 	result := ValidationResultIndeterminate
 	v.setCachedValidation(domain, result)
 
