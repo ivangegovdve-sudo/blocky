@@ -447,10 +447,11 @@ func (r *UpstreamResolver) Resolve(ctx context.Context, request *model.Request) 
 		retry.LastErrorOnly(true),
 		retry.RetryIf(isTimeout),
 		retry.OnRetry(func(n uint, err error) {
+			// question is already injected from the request context by the
+			// contextHandler; re-adding it here would emit a duplicate key.
 			logger.Debug("retrying after error",
 				log.AttrError(err),
 				slog.String("upstream_ip", ip.String()),
-				slog.Any("question", util.QuestionLogValuer{Questions: request.Req.Question}),
 				slog.String("attempt", fmt.Sprintf("%d/%d", n+1, retryAttempts)))
 
 			ips.Next()

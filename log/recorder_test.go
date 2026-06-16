@@ -65,6 +65,49 @@ func TestRecorderWithGroupNests(t *testing.T) {
 	}
 }
 
+func TestRecorderWithGroupMergesAttrs(t *testing.T) {
+	logger, rec := NewRecorder()
+
+	// A WithAttrs attr and a per-call attr under the same group must land in a
+	// SINGLE merged group, like the real text/JSON handlers (not two "g" attrs).
+	logger.WithGroup("g").With(slog.Int("a", 1)).Info("m", slog.Int("b", 2))
+
+	val, ok := rec.Attr("g")
+	if !ok {
+		t.Fatal("Attr(\"g\") group not found")
+	}
+
+	if val.Kind() != slog.KindGroup {
+		t.Fatalf("expected g to be a group, got %v", val.Kind())
+	}
+
+	got := map[string]int64{}
+	for _, a := range val.Group() {
+		got[a.Key] = a.Value.Int64()
+	}
+
+	if len(got) != 2 || got["a"] != 1 || got["b"] != 2 {
+		t.Errorf("group g = %v, want a=1 b=2 in one merged group", got)
+	}
+}
+
+func TestRecorderResolvesLogValuer(t *testing.T) {
+	logger, rec := NewRecorder()
+
+	logger.Info("m", slog.Any("q", logValuerFunc(func() slog.Value {
+		return slog.StringValue("resolved")
+	})))
+
+	val, ok := rec.Attr("q")
+	if !ok {
+		t.Fatal("Attr(\"q\") not found")
+	}
+
+	if val.Kind() != slog.KindString || val.String() != "resolved" {
+		t.Errorf("q = %v (kind %v), want resolved string", val.String(), val.Kind())
+	}
+}
+
 func TestRecorderBaseAttrsPrecedeRecordAttrs(t *testing.T) {
 	logger, rec := NewRecorder()
 

@@ -5,7 +5,7 @@ package dnssec
 
 import (
 	"context"
-	"fmt"
+	"log/slog"
 
 	"github.com/miekg/dns"
 )
@@ -33,7 +33,8 @@ func (v *Validator) validateDenialOfExistence(
 	// Validate the authority section RRsets first (must have valid signatures)
 	result := v.validateRRsets(ctx, response.Ns, question.Name, response.Ns, question.Name)
 	if result != ValidationResultSecure {
-		v.logger.Warn(fmt.Sprintf("Authority section validation failed for denial of existence: %s", question.Name))
+		v.logger.Warn("authority section validation failed for denial of existence",
+			slog.String("qname", question.Name))
 
 		return result
 	}
@@ -46,7 +47,7 @@ func (v *Validator) validateDenialOfExistence(
 	}
 
 	// No NSEC or NSEC3 records found - cannot validate denial of existence
-	v.logger.Warn(fmt.Sprintf("No NSEC/NSEC3 records found for denial of existence: %s", question.Name))
+	v.logger.Warn("no NSEC/NSEC3 records found for denial of existence", slog.String("qname", question.Name))
 
 	return ValidationResultInsecure
 }

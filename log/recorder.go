@@ -40,23 +40,75 @@ func (r *Recorder) Enabled(context.Context, slog.Level) bool { return true }
 func (r *Recorder) Handle(_ context.Context, rec slog.Record) error {
 	stored := slog.NewRecord(rec.Time, rec.Level, rec.Message, rec.PC)
 
-	// base attrs (attached via WithAttrs) precede the record's own attrs,
-	// matching the ordering of the real text/JSON handlers.
-	stored.AddAttrs(r.base...)
-
 	recAttrs := make([]slog.Attr, 0, rec.NumAttrs())
 	rec.Attrs(func(a slog.Attr) bool {
 		recAttrs = append(recAttrs, a)
 
 		return true
 	})
-	stored.AddAttrs(nestGroups(r.groups, recAttrs)...)
+
+	// base attrs (attached via WithAttrs) precede the record's own attrs,
+	// matching the ordering of the real text/JSON handlers. resolveAttrs
+	// resolves slog.LogValuer values (so captured question/answer fields are
+	// obfuscated exactly as production emits them), and mergeGroupAttrs folds
+	// attrs sharing a WithGroup group into a single group like the real handlers.
+	all := append(slices.Clone(r.base), nestGroups(r.groups, recAttrs)...)
+	stored.AddAttrs(mergeGroupAttrs(resolveAttrs(all))...)
 
 	r.store.mu.Lock()
 	defer r.store.mu.Unlock()
 	r.store.records = append(r.store.records, stored)
 
 	return nil
+}
+
+// resolveAttrs resolves any slog.LogValuer values (recursing into groups) so the
+// Recorder stores the concrete values the real text/JSON handlers would emit,
+// including privacy-obfuscated question/answer fields, rather than unresolved
+// valuers.
+func resolveAttrs(attrs []slog.Attr) []slog.Attr {
+	out := make([]slog.Attr, len(attrs))
+
+	for i, a := range attrs {
+		v := a.Value.Resolve()
+		if v.Kind() == slog.KindGroup {
+			v = slog.GroupValue(resolveAttrs(v.Group())...)
+		}
+
+		out[i] = slog.Attr{Key: a.Key, Value: v}
+	}
+
+	return out
+}
+
+// mergeGroupAttrs merges attrs that represent the same WithGroup group (same key
+// holding a group value) into one group, recursively — matching slog, which
+// emits a single nested group rather than one per WithAttrs call. Plain
+// (non-group) attrs are left untouched, including same-key duplicates, which
+// slog itself does not deduplicate.
+func mergeGroupAttrs(attrs []slog.Attr) []slog.Attr {
+	out := make([]slog.Attr, 0, len(attrs))
+	groupPos := make(map[string]int)
+
+	for _, a := range attrs {
+		if a.Value.Kind() != slog.KindGroup {
+			out = append(out, a)
+
+			continue
+		}
+
+		if pos, ok := groupPos[a.Key]; ok {
+			combined := append(slices.Clone(out[pos].Value.Group()), a.Value.Group()...)
+			out[pos] = slog.Attr{Key: a.Key, Value: slog.GroupValue(mergeGroupAttrs(combined)...)}
+
+			continue
+		}
+
+		groupPos[a.Key] = len(out)
+		out = append(out, slog.Attr{Key: a.Key, Value: slog.GroupValue(mergeGroupAttrs(a.Value.Group())...)})
+	}
+
+	return out
 }
 
 func (r *Recorder) WithAttrs(attrs []slog.Attr) slog.Handler {
@@ -159,14 +211,12 @@ func (r *Recorder) Reset() {
 // func (call via DeferCleanup). Ginkgo runs specs serially per process, so this
 // is safe within a spec.
 func CaptureGlobal() (*Recorder, func()) {
-	prev := logger
+	prev := logger.Load()
 	rec := &Recorder{store: &recorderStore{}}
-	logger = slog.New(&contextHandler{next: rec})
-	slog.SetDefault(logger)
+	setLogger(slog.New(&contextHandler{next: rec}))
 
 	return rec, func() {
-		logger = prev
-		slog.SetDefault(prev)
+		setLogger(prev)
 	}
 }
 
@@ -174,8 +224,10 @@ func CaptureGlobal() (*Recorder, func()) {
 // quiet on passing specs, full diagnostics on failure. No color, trace level.
 func ConfigureForTest(w io.Writer) {
 	levelVar.Set(LevelTrace)
-	logger = slog.New(&contextHandler{next: slog.NewTextHandler(w, &slog.HandlerOptions{
-		Level: levelVar,
-	})})
-	slog.SetDefault(logger)
+	// Mirror production's ReplaceAttr so trace renders as "TRACE" (not
+	// "DEBUG-4"), keeping test output consistent with what blocky emits.
+	setLogger(slog.New(&contextHandler{next: slog.NewTextHandler(w, &slog.HandlerOptions{
+		Level:       levelVar,
+		ReplaceAttr: replaceAttr(DefaultConfig()),
+	})}))
 }

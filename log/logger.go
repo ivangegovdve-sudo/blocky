@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync/atomic"
 
 	"github.com/creasty/defaults"
 	"github.com/lmittmann/tint"
@@ -44,16 +45,24 @@ func DefaultConfig() *Config {
 //nolint:gochecknoglobals
 var (
 	levelVar = new(slog.LevelVar)
-	logger   = newLogger(os.Stdout, DefaultConfig())
+	logger   atomic.Pointer[slog.Logger]
 )
 
 //nolint:gochecknoinits
 func init() {
-	slog.SetDefault(logger)
+	setLogger(newLogger(os.Stdout, DefaultConfig()))
+}
+
+// setLogger atomically swaps the global logger and the slog default. Readers
+// (Log/PrefixedLog/FromCtx) load the pointer atomically, so a hot-path reader
+// never races with a Configure/Silence/CaptureGlobal swap.
+func setLogger(l *slog.Logger) {
+	logger.Store(l)
+	slog.SetDefault(l)
 }
 
 // Log returns the global logger.
-func Log() *slog.Logger { return logger }
+func Log() *slog.Logger { return logger.Load() }
 
 // SetLevel changes the active log level at runtime.
 func SetLevel(l slog.Level) { levelVar.Set(l) }
@@ -64,8 +73,7 @@ func Configure(cfg *Config) { configureTo(os.Stdout, cfg) }
 // configureTo is the test seam: it builds the global logger writing to w.
 func configureTo(w io.Writer, cfg *Config) {
 	levelVar.Set(cfg.Level.ToSlogLevel())
-	logger = newLogger(w, cfg)
-	slog.SetDefault(logger)
+	setLogger(newLogger(w, cfg))
 }
 
 // newLogger builds a slog logger for cfg writing to w, wrapped in the
@@ -145,7 +153,7 @@ func replaceAttr(cfg *Config) func([]string, slog.Attr) slog.Attr {
 
 // PrefixedLog returns the global logger tagged with a prefix attr.
 func PrefixedLog(prefix string) *slog.Logger {
-	return logger.With(slog.String(prefixKey, prefix))
+	return logger.Load().With(slog.String(prefixKey, prefix))
 }
 
 // WithPrefix appends a prefix attr; it does NOT merge with an existing prefix.

@@ -146,7 +146,7 @@ func (r *HostsFileResolver) Resolve(ctx context.Context, request *model.Request)
 	response := r.resolve(question, domain)
 	if response != nil {
 		logger.Debug("returning hosts file entry",
-			slog.String(logFieldAnswer, util.Obfuscate(util.AnswerToString(response))),
+			slog.Any(logFieldAnswer, util.AnswerLogValuer{Answers: response}),
 			slog.String(logFieldDomain, util.Obfuscate(domain)))
 
 		return model.NewResponseWithAnswers(request, response, model.ResponseTypeHOSTSFILE, "HOSTS FILE"), nil

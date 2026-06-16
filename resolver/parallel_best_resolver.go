@@ -185,14 +185,14 @@ func evaluateResponses(
 		logger := logger.With(slog.Any("resolver", *result.resolver))
 
 		if result.err != nil {
-			logger.Debug("resolution failed from resolver, cause: " + result.err.Error())
+			logger.Debug("resolution failed from resolver", log.AttrError(result.err))
 			collectedErrors = append(collectedErrors, fmt.Errorf("resolver: %q error: %w", *result.resolver, result.err))
 
 			continue
 		}
 
 		logger.Debug("using response from resolver",
-			slog.String(logFieldAnswer, util.Obfuscate(util.AnswerToString(result.response.Res.Answer))))
+			slog.Any(logFieldAnswer, util.AnswerLogValuer{Answers: result.response.Res.Answer}))
 
 		return result.response, nil
 	}
@@ -214,7 +214,7 @@ func (r *ParallelBestResolver) retryWithDifferent(
 
 	logger.Debug("using response from resolver",
 		slog.Any("resolver", *resolver),
-		slog.String(logFieldAnswer, util.Obfuscate(util.AnswerToString(resp.Res.Answer))))
+		slog.Any(logFieldAnswer, util.AnswerLogValuer{Answers: resp.Res.Answer}))
 
 	return resp, nil
 }

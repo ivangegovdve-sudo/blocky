@@ -148,13 +148,13 @@ func (r *ConditionalUpstreamResolver) internalResolve(ctx context.Context, reso 
 		return nil, fmt.Errorf("conditional upstream resolution failed for domain '%s': %w", do, err)
 	}
 
-	var answer string
+	var answers []dns.RR
 	if response != nil {
-		answer = util.Obfuscate(util.AnswerToString(response.Res.Answer))
+		answers = response.Res.Answer
 	}
 
 	logger.Debug("received response from conditional upstream",
-		slog.String(logFieldAnswer, answer),
+		slog.Any(logFieldAnswer, util.AnswerLogValuer{Answers: answers}),
 		slog.String(logFieldDomain, util.Obfuscate(do)),
 		slog.Any(logFieldUpstream, reso))
 

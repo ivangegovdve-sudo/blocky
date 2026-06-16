@@ -191,7 +191,10 @@ func (b *Bootstrap) dialContext(ctx context.Context, network, addr string) (net.
 		return conn, nil
 	}
 
-	ctx, logger := b.logWithFields(ctx, slog.String("network", network), slog.String("addr", addr))
+	// Store network/addr in the context (not just on the logger) so the
+	// downstream b.resolve(...) child-resolution logs inherit them too.
+	ctx, _ = log.CtxWithFields(ctx, slog.String("network", network), slog.String("addr", addr))
+	_, logger := b.log(ctx)
 
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {

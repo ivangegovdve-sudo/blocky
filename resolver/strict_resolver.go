@@ -79,7 +79,7 @@ func (r *StrictResolver) Resolve(ctx context.Context, request *model.Request) (*
 
 		logger.Debug("using response from resolver",
 			slog.Any("resolver", *resolver),
-			slog.String(logFieldAnswer, util.Obfuscate(util.AnswerToString(resp.Res.Answer))))
+			slog.Any(logFieldAnswer, util.AnswerLogValuer{Answers: resp.Res.Answer}))
 
 		return resp, nil
 	}

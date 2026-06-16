@@ -119,8 +119,9 @@ func (r *RateLimitingResolver) recordDrop(ctx context.Context, req *model.Reques
 	if now-prev < int64(time.Second) || !e.lastLogged.CompareAndSwap(prev, now) {
 		return
 	}
+	// client_ip is already injected from the request context by the
+	// contextHandler; re-adding it here would emit a duplicate key.
 	_, logger := r.logWithFields(ctx,
-		slog.Any("client_ip", req.ClientIP),
 		slog.Any(logFieldProtocol, req.Protocol),
 		slog.Any("qname", util.QuestionLogValuer{Questions: req.Req.Question}),
 		slog.Float64("bucket_tokens", e.limiter.Tokens()),

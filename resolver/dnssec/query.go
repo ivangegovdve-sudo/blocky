@@ -6,7 +6,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
+	"github.com/0xERR0R/blocky/log"
 	"github.com/0xERR0R/blocky/model"
 	"github.com/miekg/dns"
 )
@@ -47,7 +49,8 @@ func (v *Validator) queryRecords(
 ) (context.Context, *dns.Msg, error) {
 	// Check query budget (DoS protection)
 	if err := v.consumeQueryBudget(ctx); err != nil {
-		v.logger.Warn(fmt.Sprintf("Query budget exhausted while querying %s (type %d): %v", domain, qtype, err))
+		v.logger.Warn("query budget exhausted",
+			slog.String("domain", domain), slog.Int("qtype", int(qtype)), log.AttrError(err))
 
 		return ctx, nil, err
 	}

@@ -210,8 +210,9 @@ func (r *QueryLoggingResolver) Resolve(ctx context.Context, request *model.Reque
 	entry := r.createLogEntry(request, resp, start, duration)
 
 	if r.ignore(request, resp) {
-		// Log to the console for debugging purposes
-		logger.Debug("ignored querylog entry", slog.Any("entry", entry))
+		// Log to the console for debugging purposes, as flat snake_case fields
+		// (matching the file/db writers) rather than a nested struct dump.
+		logger.LogAttrs(ctx, slog.LevelDebug, "ignored querylog entry", querylog.LogEntryFields(entry)...)
 	} else {
 		select {
 		case r.logChan <- entry:

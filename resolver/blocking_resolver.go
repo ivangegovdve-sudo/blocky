@@ -652,7 +652,9 @@ func (b ipBlockHandler) handleBlock(question dns.Question, response *dns.Msg) {
 }
 
 func (r *BlockingResolver) queryForFQIdentifierIPs(ctx context.Context, identifier string) (*[]net.IP, time.Duration) {
-	logger := r.clientIDCacheLog
+	// Bind to ctx so the "resolved client IPs" line carries request-scoped
+	// fields (req_id, client_ip) when this runs on a request-driven cache miss.
+	logger := log.WithContext(ctx, r.clientIDCacheLog)
 
 	var result []net.IP
 

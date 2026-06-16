@@ -3,7 +3,6 @@ package querylog
 import (
 	"context"
 	"log/slog"
-	"reflect"
 	"strings"
 
 	"github.com/0xERR0R/blocky/log"
@@ -48,10 +47,30 @@ func withoutZeroes(attrs ...slog.Attr) []slog.Attr {
 	result := attrs[:0]
 
 	for _, a := range attrs {
-		if !reflect.ValueOf(a.Value.Any()).IsZero() {
+		if !isZeroValue(a.Value) {
 			result = append(result, a)
 		}
 	}
 
 	return result
+}
+
+// isZeroValue reports whether v holds the zero value for its kind. It switches
+// on slog.Kind rather than using reflection so the per-query query-log path
+// stays allocation-free and never panics on a nil interface value.
+func isZeroValue(v slog.Value) bool {
+	switch v.Kind() {
+	case slog.KindString:
+		return v.String() == ""
+	case slog.KindInt64:
+		return v.Int64() == 0
+	case slog.KindUint64:
+		return v.Uint64() == 0
+	case slog.KindFloat64:
+		return v.Float64() == 0
+	case slog.KindBool:
+		return !v.Bool()
+	default:
+		return false
+	}
 }
