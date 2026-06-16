@@ -208,13 +208,13 @@ func configureDocsHandler(router *chi.Mux) {
 	router.Get("/docs/openapi.yaml", func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set(contentTypeHeader, yamlContentType)
 		_, err := writer.Write([]byte(docs.OpenAPI))
-		logAndResponseWithError(err, "can't write OpenAPI definition file: ", writer)
+		logAndResponseWithError(err, "can't write OpenAPI definition file", writer)
 	})
 
 	router.Get("/docs/config.schema.json", func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set(contentTypeHeader, jsonContentType)
 		_, err := writer.Write(docs.ConfigSchema)
-		logAndResponseWithError(err, "can't write config JSON schema file: ", writer)
+		logAndResponseWithError(err, "can't write config JSON schema file", writer)
 	})
 }
 
@@ -286,13 +286,13 @@ func configureRootHandler(cfg *config.Config, router *chi.Mux) {
 		}
 
 		err := t.Execute(writer, pd)
-		logAndResponseWithError(err, "can't write index template: ", writer)
+		logAndResponseWithError(err, "can't write index template", writer)
 	})
 }
 
 func logAndResponseWithError(err error, message string, writer http.ResponseWriter) {
 	if err != nil {
-		log.Log().Error(message + log.EscapeInput(err.Error()))
+		log.Log().Error(message, log.AttrError(err))
 		http.Error(writer, err.Error(), http.StatusInternalServerError)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	"github.com/0xERR0R/blocky/config"
+	"github.com/0xERR0R/blocky/log"
 	"github.com/0xERR0R/blocky/model"
 	"github.com/0xERR0R/blocky/util"
 )
@@ -72,7 +73,7 @@ func (r *StrictResolver) Resolve(ctx context.Context, request *model.Request) (*
 		resp, err := resolver.resolve(ctx, request)
 		if err != nil {
 			// log error and try next upstream
-			logger.Debug("resolution failed from resolver, cause: "+err.Error(), slog.Any("resolver", resolver.resolver))
+			logger.Debug("resolution failed from resolver", slog.Any("resolver", resolver.resolver), log.AttrError(err))
 
 			continue
 		}
