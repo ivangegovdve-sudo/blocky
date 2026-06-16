@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net"
 	"testing"
 	"time"
@@ -13,7 +14,6 @@ import (
 	"github.com/0xERR0R/blocky/resolver"
 
 	"github.com/miekg/dns"
-	"github.com/sirupsen/logrus"
 )
 
 // These benchmarks exercise the DNS request hot path end-to-end (request
@@ -33,10 +33,10 @@ type benchTerminalResolver struct {
 	resolver.NextResolver
 }
 
-func (benchTerminalResolver) Type() string            { return "bench_terminal" }
-func (r benchTerminalResolver) String() string        { return r.Type() }
-func (benchTerminalResolver) IsEnabled() bool         { return true }
-func (benchTerminalResolver) LogConfig(*logrus.Entry) {}
+func (benchTerminalResolver) Type() string           { return "bench_terminal" }
+func (r benchTerminalResolver) String() string       { return r.Type() }
+func (benchTerminalResolver) IsEnabled() bool        { return true }
+func (benchTerminalResolver) LogConfig(*slog.Logger) {}
 
 // benchAnswerRR is parsed once; the terminal resolver clones it per call so the
 // benchmark measures response handling, not repeated zone-file parsing (which
@@ -85,13 +85,13 @@ func benchQuery(name string) *dns.Msg {
 
 // benchmarkHotPath runs the full per-request path: build the request (the same
 // path used by newRequestFromDNS) and resolve it through the chain.
-func benchmarkHotPath(b *testing.B, level logrus.Level, chain resolver.ChainedResolver) {
+func benchmarkHotPath(b *testing.B, level slog.Level, chain resolver.ChainedResolver) {
 	b.Helper()
 
 	// Real logger at the given level, but discard output: we measure the
 	// per-request plumbing, not the cost of writing bytes to a terminal.
-	log.Configure(&log.Config{Level: level, Format: log.FormatTypeText, Timestamp: true})
-	log.Log().SetOutput(io.Discard)
+	log.ConfigureForTest(io.Discard)
+	log.SetLevel(level)
 
 	srv := newBenchServer(chain)
 	clientIP := net.ParseIP("192.168.178.1")
@@ -119,11 +119,11 @@ var runtimeSink *model.Response
 // BenchmarkHotPath_InfoLevel is the common production case (debug/trace off).
 func BenchmarkHotPath_InfoLevel(b *testing.B) {
 	chain := resolver.Chain(&benchTerminalResolver{})
-	benchmarkHotPath(b, logrus.InfoLevel, chain)
+	benchmarkHotPath(b, slog.LevelInfo, chain)
 }
 
 // BenchmarkHotPath_DebugLevel shows the cost when debug lines are emitted.
 func BenchmarkHotPath_DebugLevel(b *testing.B) {
 	chain := resolver.Chain(&benchTerminalResolver{})
-	benchmarkHotPath(b, logrus.DebugLevel, chain)
+	benchmarkHotPath(b, slog.LevelDebug, chain)
 }

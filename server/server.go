@@ -735,7 +735,7 @@ func (s *Server) handleReq(ctx context.Context, request *model.Request, w msgWri
 	case errors.Is(err, resolver.ErrRateLimited):
 		return
 	case err != nil:
-		log.FromCtx(ctx).Error("error on processing request:", err)
+		log.FromCtx(ctx).Error("error on processing request", log.AttrError(err))
 		m := new(dns.Msg)
 		m.SetRcode(request.Req, dns.RcodeServerFailure)
 		err := w.WriteMsg(m)
