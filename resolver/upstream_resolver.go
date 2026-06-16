@@ -440,7 +440,8 @@ func (r *UpstreamResolver) Resolve(ctx context.Context, request *model.Request) 
 		retry.LastErrorOnly(true),
 		retry.RetryIf(isTimeout),
 		retry.OnRetry(func(n uint, err error) {
-			logger.Debug(fmt.Sprintf("%s, retrying...", err),
+			logger.Debug("retrying after error",
+				log.AttrError(err),
 				slog.String(logFieldUpstream, r.cfg.String()),
 				slog.String("upstream_ip", ip.String()),
 				slog.String("question", util.QuestionToString(request.Req.Question)),

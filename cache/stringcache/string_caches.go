@@ -2,6 +2,7 @@ package stringcache
 
 import (
 	"fmt"
+	"log/slog"
 	"regexp"
 	"slices"
 	"sort"
@@ -56,7 +57,9 @@ func (cache stringMap) findMatch(searchString string) (string, bool) {
 	if idx < searchBucketLen {
 		blockRule := cache[searchLen][idx*searchLen : idx*searchLen+searchLen]
 		if blockRule == normalized {
-			log.PrefixedLog("string_map").Debug(fmt.Sprintf("block rule '%s' matched with '%s'", blockRule, searchString))
+			log.PrefixedLog("string_map").Debug("block rule matched",
+				slog.String("rule", blockRule),
+				slog.String("search", searchString))
 
 			return blockRule, true
 		}
@@ -132,7 +135,9 @@ func (cache regexCache) elementCount() int {
 func (cache regexCache) findMatch(searchString string) (string, bool) {
 	for _, regex := range cache {
 		if regex.MatchString(searchString) {
-			log.PrefixedLog("regex_cache").Debug(fmt.Sprintf("regex '%s' matched with '%s'", regex, searchString))
+			log.PrefixedLog("regex_cache").Debug("block rule matched",
+				slog.String("rule", regex.String()),
+				slog.String("search", searchString))
 
 			// re-wrap in the '/.../' delimiters that addEntry strips on insertion
 			// so the reported rule matches the entry as configured by the user.
@@ -186,8 +191,9 @@ func newRegexCacheFactory() cacheFactory {
 }
 
 type wildcardCache struct {
-	trie trie.Trie
-	cnt  int
+	trie   trie.Trie
+	cnt    int
+	logger *slog.Logger
 }
 
 func (cache wildcardCache) elementCount() int {
@@ -207,7 +213,9 @@ func (cache wildcardCache) findMatch(domain string) (string, bool) {
 	// concern rather than being hard-coded here.
 	rule := "*." + trie.JoinTLD(labels)
 
-	log.PrefixedLog("wildcard_cache").Debug(fmt.Sprintf("wildcard block rule '%s' matched with '%s'", rule, domain))
+	cache.logger.Debug("block rule matched",
+		slog.String("rule", rule),
+		slog.String("search", domain))
 
 	return rule, true
 }
@@ -253,7 +261,7 @@ func (r *wildcardCacheFactory) create() stringCache {
 		return nil
 	}
 
-	return wildcardCache{*r.trie, r.cnt}
+	return wildcardCache{*r.trie, r.cnt, log.PrefixedLog("wildcard_cache")}
 }
 
 func normalizeWildcard(domain string) string {

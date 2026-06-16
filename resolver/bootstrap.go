@@ -195,7 +195,7 @@ func (b *Bootstrap) dialContext(ctx context.Context, network, addr string) (net.
 
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
-		logger.Error(fmt.Sprintf("dial error: %s", err))
+		logger.Error("dial error", log.AttrError(err))
 
 		return nil, fmt.Errorf("failed to parse dial address '%s': %w", addr, err)
 	}
@@ -216,7 +216,7 @@ func (b *Bootstrap) dialContext(ctx context.Context, network, addr string) (net.
 	// Resolve the host with the bootstrap DNS
 	ips, err := b.resolve(ctx, host, qTypes)
 	if err != nil {
-		logger.Error(fmt.Sprintf("resolve error: %s", err))
+		logger.Error("resolve error", log.AttrError(err))
 
 		return nil, fmt.Errorf("failed to resolve host '%s' via bootstrap DNS: %w", host, err)
 	}

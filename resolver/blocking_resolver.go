@@ -94,6 +94,7 @@ type BlockingResolver struct {
 	status              *status
 	clientGroupsBlock   map[string][]scheduledGroup
 	fqdnIPCache         cache.ExpiringCache[[]net.IP]
+	clientIDCacheLog    *slog.Logger
 }
 
 // scheduledGroup pairs a list group name with optional schedules.
@@ -172,6 +173,7 @@ func NewBlockingResolver(ctx context.Context,
 			enableTimer: time.NewTimer(0),
 		},
 		clientGroupsBlock: clientGroupsBlock(cfg),
+		clientIDCacheLog:  log.PrefixedLog("blocking.client_id_cache"),
 	}
 
 	res.fqdnIPCache = expirationcache.NewCacheWithOnExpired[[]net.IP](ctx, expirationcache.Options{
@@ -650,7 +652,7 @@ func (b ipBlockHandler) handleBlock(question dns.Question, response *dns.Msg) {
 }
 
 func (r *BlockingResolver) queryForFQIdentifierIPs(ctx context.Context, identifier string) (*[]net.IP, time.Duration) {
-	logger := log.PrefixedLog(r.Type() + ".client_id_cache")
+	logger := r.clientIDCacheLog
 
 	var result []net.IP
 

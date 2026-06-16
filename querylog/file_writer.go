@@ -1,6 +1,7 @@
 package querylog
 
 import (
+	"context"
 	"encoding/csv"
 	"fmt"
 	"io"
@@ -77,7 +78,7 @@ func (d *FileWriter) CleanUp() {
 
 	logger := log.PrefixedLog(loggerPrefixFileWriter)
 
-	logger.Debug("starting clean up")
+	log.Trace(context.Background(), logger, "starting clean up")
 
 	files, err := os.ReadDir(d.target)
 

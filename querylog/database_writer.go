@@ -236,7 +236,7 @@ func (d *DatabaseWriter) doDBWrite() error {
 	var err *multierror.Error
 
 	if len(d.pendingEntries) > 0 {
-		log.Log().Debug(fmt.Sprintf("%d entries to write", len(d.pendingEntries)))
+		log.Trace(context.Background(), log.Log(), "entries to write", slog.Int("count", len(d.pendingEntries)))
 
 		const bulkSize = 100
 
