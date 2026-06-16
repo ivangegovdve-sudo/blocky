@@ -1,6 +1,7 @@
 package querylog
 
 import (
+	"context"
 	"log/slog"
 	"reflect"
 	"strings"
@@ -19,34 +20,38 @@ func NewLoggerWriter() *LoggerWriter {
 }
 
 func (d *LoggerWriter) Write(entry *LogEntry) {
-	d.logger.Info("query resolved", slog.Any("entry", entry))
+	d.logger.LogAttrs(context.Background(), slog.LevelInfo, "query resolved", LogEntryFields(entry)...)
 }
 
 func (d *LoggerWriter) CleanUp() {
 	// Nothing to do
 }
 
-func LogEntryFields(entry *LogEntry) map[string]any {
-	return withoutZeroes(map[string]any{
-		"client_ip":       entry.ClientIP,
-		"client_names":    strings.Join(entry.ClientNames, "; "),
-		"response_reason": entry.ResponseReason,
-		"response_type":   entry.ResponseType,
-		"response_code":   entry.ResponseCode,
-		"question_name":   entry.QuestionName,
-		"question_type":   entry.QuestionType,
-		"answer":          entry.Answer,
-		"duration_ms":     entry.DurationMs,
-		"instance":        entry.BlockyInstance,
-	})
+// LogEntryFields returns the entry as flat, snake_case slog attrs, omitting
+// zero-valued fields (matching the historical logrus WithFields output).
+func LogEntryFields(entry *LogEntry) []slog.Attr {
+	return withoutZeroes(
+		slog.String("client_ip", entry.ClientIP),
+		slog.String("client_names", strings.Join(entry.ClientNames, "; ")),
+		slog.String("response_reason", entry.ResponseReason),
+		slog.String("response_type", entry.ResponseType),
+		slog.String("response_code", entry.ResponseCode),
+		slog.String("question_name", entry.QuestionName),
+		slog.String("question_type", entry.QuestionType),
+		slog.String("answer", entry.Answer),
+		slog.Int64("duration_ms", entry.DurationMs),
+		slog.String("instance", entry.BlockyInstance),
+	)
 }
 
-func withoutZeroes(fields map[string]any) map[string]any {
-	for k, v := range fields {
-		if reflect.ValueOf(v).IsZero() {
-			delete(fields, k)
+func withoutZeroes(attrs ...slog.Attr) []slog.Attr {
+	result := attrs[:0]
+
+	for _, a := range attrs {
+		if !reflect.ValueOf(a.Value.Any()).IsZero() {
+			result = append(result, a)
 		}
 	}
 
-	return fields
+	return result
 }

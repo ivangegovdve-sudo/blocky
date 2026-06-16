@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"slices"
 	"sync"
 )
 
@@ -16,12 +17,18 @@ type recorderStore struct {
 
 // Recorder is a slog.Handler that records emitted records for test assertions.
 // It replaces the old logrus MockLoggerHook / test.NewGlobal patterns.
+//
+// Enabled always returns true: the Recorder captures records at every level so
+// tests can assert on debug/trace output regardless of the active level. Test
+// level-gating itself through the real handlers (which honor levelVar), not the
+// Recorder.
 type Recorder struct {
-	store *recorderStore
-	base  []slog.Attr // attrs pre-attached via WithAttrs
+	store  *recorderStore
+	base   []slog.Attr // attrs pre-attached via WithAttrs (already group-nested)
+	groups []string    // currently-open groups (from WithGroup)
 }
 
-// NewRecorder returns a logger writing into a fresh Recorder (trace level).
+// NewRecorder returns a logger writing into a fresh Recorder (captures all levels).
 func NewRecorder() (*slog.Logger, *Recorder) {
 	rec := &Recorder{store: &recorderStore{}}
 
@@ -31,28 +38,55 @@ func NewRecorder() (*slog.Logger, *Recorder) {
 func (r *Recorder) Enabled(context.Context, slog.Level) bool { return true }
 
 func (r *Recorder) Handle(_ context.Context, rec slog.Record) error {
-	c := rec.Clone()
-	if len(r.base) > 0 {
-		// prepend base attrs (pre-attached via WithAttrs)
-		c.AddAttrs(r.base...)
-	}
+	stored := slog.NewRecord(rec.Time, rec.Level, rec.Message, rec.PC)
+
+	// base attrs (attached via WithAttrs) precede the record's own attrs,
+	// matching the ordering of the real text/JSON handlers.
+	stored.AddAttrs(r.base...)
+
+	recAttrs := make([]slog.Attr, 0, rec.NumAttrs())
+	rec.Attrs(func(a slog.Attr) bool {
+		recAttrs = append(recAttrs, a)
+
+		return true
+	})
+	stored.AddAttrs(nestGroups(r.groups, recAttrs)...)
 
 	r.store.mu.Lock()
 	defer r.store.mu.Unlock()
-	r.store.records = append(r.store.records, c)
+	r.store.records = append(r.store.records, stored)
 
 	return nil
 }
 
 func (r *Recorder) WithAttrs(attrs []slog.Attr) slog.Handler {
-	merged := make([]slog.Attr, 0, len(r.base)+len(attrs))
-	merged = append(merged, r.base...)
-	merged = append(merged, attrs...)
+	// attrs added now sit at the current group depth, like the real handlers.
+	grouped := nestGroups(r.groups, attrs)
 
-	return &Recorder{store: r.store, base: merged}
+	merged := make([]slog.Attr, 0, len(r.base)+len(grouped))
+	merged = append(merged, r.base...)
+	merged = append(merged, grouped...)
+
+	return &Recorder{store: r.store, base: merged, groups: r.groups}
 }
 
-func (r *Recorder) WithGroup(string) slog.Handler { return r }
+func (r *Recorder) WithGroup(name string) slog.Handler {
+	if name == "" {
+		return r
+	}
+
+	return &Recorder{store: r.store, base: r.base, groups: append(slices.Clone(r.groups), name)}
+}
+
+// nestGroups wraps attrs in the given group chain (outermost first), so
+// groups=["a","b"] turns attr into a.b.attr, matching slog grouping semantics.
+func nestGroups(groups []string, attrs []slog.Attr) []slog.Attr {
+	for i := len(groups) - 1; i >= 0; i-- {
+		attrs = []slog.Attr{{Key: groups[i], Value: slog.GroupValue(attrs...)}}
+	}
+
+	return attrs
+}
 
 // Records returns a copy of the recorded records.
 func (r *Recorder) Records() []slog.Record {

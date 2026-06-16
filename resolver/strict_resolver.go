@@ -3,7 +3,6 @@ package resolver
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"sync/atomic"
 
@@ -68,7 +67,7 @@ func (r *StrictResolver) Resolve(ctx context.Context, request *model.Request) (*
 
 	// start with first resolver
 	for _, resolver := range *r.resolvers.Load() {
-		logger.Debug(fmt.Sprintf("using %s as resolver", resolver.resolver))
+		logger.Debug("using resolver", slog.Any("resolver", resolver.resolver))
 
 		resp, err := resolver.resolve(ctx, request)
 		if err != nil {

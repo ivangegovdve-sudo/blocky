@@ -155,7 +155,7 @@ func (r *CachingResolver) reloadCacheEntry(ctx context.Context, cacheKey string)
 	qType, domainName := util.ExtractCacheKey(cacheKey)
 	ctx, logger := r.log(ctx)
 
-	logger.Debug(fmt.Sprintf("prefetching '%s' (%s)", util.Obfuscate(domainName), qType))
+	logger.Debug("prefetching", slog.String("domain", util.Obfuscate(domainName)), slog.Any("qtype", qType))
 
 	req := newRequest(dns.Fqdn(domainName), qType)
 	response, err := r.next.Resolve(ctx, req)

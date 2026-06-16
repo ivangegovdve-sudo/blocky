@@ -359,7 +359,7 @@ func (r *BlockingResolver) handleBlocked(logger *slog.Logger,
 	modelResp := model.NewResponseWithReason(request, model.ResponseTypeBLOCKED, reason)
 	r.blockHandler.handleBlock(question, modelResp.Res)
 
-	logger.Debug(fmt.Sprintf("blocking request '%s'", reason))
+	logger.Debug("blocking request", slog.String("reason", reason))
 
 	return modelResp, nil
 }
@@ -446,7 +446,7 @@ func (r *BlockingResolver) Resolve(ctx context.Context, request *model.Request) 
 				logger := logger.With(slog.String("response_entry", entryToCheck))
 
 				if matches := r.matches(groupsToCheck, r.allowlistMatcher, entryToCheck); len(matches) > 0 {
-					logger.Debug(fmt.Sprintf("%s is allowlisted", tName), slog.Any("matches", matches))
+					logger.Debug("allowlisted", slog.String("list", tName), slog.Any("matches", matches))
 				} else if matches := r.matches(groupsToCheck, r.denylistMatcher, entryToCheck); len(matches) > 0 {
 					return r.handleBlocked(logger, request, request.Req.Question[0], formatBlockReason(matches, tName))
 				}

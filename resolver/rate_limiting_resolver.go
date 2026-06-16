@@ -94,7 +94,7 @@ func (r *RateLimitingResolver) Resolve(ctx context.Context, req *model.Request) 
 	if entry == nil {
 		r.capExhausted.Inc()
 	}
-	r.recordDrop(req, entry)
+	r.recordDrop(ctx, req, entry)
 
 	return nil, ErrRateLimited
 }
@@ -109,7 +109,7 @@ func (r *RateLimitingResolver) isAllowlisted(ip net.IP) bool {
 	return false
 }
 
-func (r *RateLimitingResolver) recordDrop(req *model.Request, e *bucketEntry) {
+func (r *RateLimitingResolver) recordDrop(ctx context.Context, req *model.Request, e *bucketEntry) {
 	r.drops.WithLabelValues(req.Protocol.String()).Inc()
 	if e == nil {
 		return
@@ -119,10 +119,10 @@ func (r *RateLimitingResolver) recordDrop(req *model.Request, e *bucketEntry) {
 	if now-prev < int64(time.Second) || !e.lastLogged.CompareAndSwap(prev, now) {
 		return
 	}
-	logger := r.typed.logger.With(
+	_, logger := r.logWithFields(ctx,
 		slog.Any("client_ip", req.ClientIP),
 		slog.Any(logFieldProtocol, req.Protocol),
-		slog.String("qname", util.QuestionToString(req.Req.Question)),
+		slog.Any("qname", util.QuestionLogValuer{Questions: req.Req.Question}),
 		slog.Float64("bucket_tokens", e.limiter.Tokens()),
 	)
 	if len(req.Req.Question) > 0 {

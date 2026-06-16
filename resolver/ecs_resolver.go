@@ -57,7 +57,7 @@ func (r *ECSResolver) Resolve(ctx context.Context, request *model.Request) (*mod
 		// Set the client IP from the Edns0 subnet option if the option is enabled and the correct subnet mask is set
 		if r.cfg.UseAsClient && so != nil && ((so.Family == ecsFamilyIPv4 && so.SourceNetmask == ecsMaskIPv4) ||
 			(so.Family == ecsFamilyIPv6 && so.SourceNetmask == ecsMaskIPv6)) {
-			logger.Debug(fmt.Sprintf("using request's edns0 address as internal client IP: %s", so.Address))
+			logger.Debug("using request's edns0 address as internal client IP", slog.Any("address", so.Address))
 			request.ClientIP = so.Address
 		}
 
@@ -100,7 +100,7 @@ func (r *ECSResolver) setSubnet(so *dns.EDNS0_SUBNET, request *model.Request, lo
 	}
 
 	if edsOption != nil {
-		logger.Debug(fmt.Sprintf("set edns0 subnet option address: %s", edsOption.Address))
+		logger.Debug("set edns0 subnet option address", slog.Any("address", edsOption.Address))
 		util.SetEdns0Option(request.Req, edsOption)
 	}
 }

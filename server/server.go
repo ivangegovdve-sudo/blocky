@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"time"
 
@@ -665,9 +666,12 @@ func newRequest(
 	clientIP net.IP, clientID string,
 	protocol model.RequestProtocol, request *dns.Msg,
 ) (context.Context, *model.Request) {
+	// Snapshot the questions: the valuer is resolved lazily for the whole
+	// request lifetime, and resolvers (e.g. conditional upstream) may mutate
+	// request.Question in place, which would otherwise change logged output.
 	ctx, logger := log.CtxWithFields(ctx,
 		slog.String("req_id", uuid.New().String()),
-		slog.Any("question", util.QuestionLogValuer{Questions: request.Question}),
+		slog.Any("question", util.QuestionLogValuer{Questions: slices.Clone(request.Question)}),
 		slog.Any("client_ip", clientIP),
 	)
 

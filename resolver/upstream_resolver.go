@@ -79,6 +79,10 @@ type UpstreamResolver struct {
 
 	upstreamClient upstreamClient
 	bootstrap      *Bootstrap
+
+	// upstreamLog is the prefixed logger pre-tagged with the (constant) upstream
+	// attr, built once at construction so Resolve does not rebuild it per request.
+	upstreamLog *slog.Logger
 }
 
 type upstreamClient interface {
@@ -367,12 +371,15 @@ func NewUpstreamResolver(
 func newUpstreamResolverUnchecked(cfg upstreamConfig, bootstrap *Bootstrap) *UpstreamResolver {
 	upstreamClient := createUpstreamClient(cfg)
 
+	base := withType(upstreamResolverType)
+
 	return &UpstreamResolver{
-		typed:        withType(upstreamResolverType),
+		typed:        base,
 		configurable: withConfig(cfg),
 
 		upstreamClient: upstreamClient,
 		bootstrap:      bootstrap,
+		upstreamLog:    base.logger.With(slog.String(logFieldUpstream, cfg.String())),
 	}
 }
 
@@ -385,7 +392,7 @@ func (r UpstreamResolver) Upstream() config.Upstream {
 }
 
 func (r *UpstreamResolver) log(ctx context.Context) (context.Context, *slog.Logger) {
-	return r.logWithFields(ctx, slog.String(logFieldUpstream, r.cfg.String()))
+	return ctx, log.WithContext(ctx, r.upstreamLog)
 }
 
 // testResolve sends a test query to verify the upstream is reachable and working
@@ -442,9 +449,8 @@ func (r *UpstreamResolver) Resolve(ctx context.Context, request *model.Request) 
 		retry.OnRetry(func(n uint, err error) {
 			logger.Debug("retrying after error",
 				log.AttrError(err),
-				slog.String(logFieldUpstream, r.cfg.String()),
 				slog.String("upstream_ip", ip.String()),
-				slog.String("question", util.QuestionToString(request.Req.Question)),
+				slog.Any("question", util.QuestionLogValuer{Questions: request.Req.Question}),
 				slog.String("attempt", fmt.Sprintf("%d/%d", n+1, retryAttempts)))
 
 			ips.Next()
@@ -460,9 +466,8 @@ func (r *UpstreamResolver) logResponse(
 	logger *slog.Logger, request *model.Request, resp *dns.Msg, ip net.IP, rtt time.Duration,
 ) {
 	logger.Debug("received response from upstream",
-		slog.String(logFieldAnswer, util.Obfuscate(util.AnswerToString(resp.Answer))),
+		slog.Any(logFieldAnswer, util.AnswerLogValuer{Answers: resp.Answer}),
 		slog.String("return_code", dns.RcodeToString[resp.Rcode]),
-		slog.String(logFieldUpstream, r.cfg.String()),
 		slog.String("upstream_ip", ip.String()),
 		slog.Any(logFieldProtocol, request.Protocol),
 		slog.Any("net", r.cfg.Net),

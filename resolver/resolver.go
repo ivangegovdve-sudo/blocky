@@ -197,21 +197,21 @@ func (t *typed) Type() string { return t.typeName }
 // String implements `fmt.Stringer`.
 func (t *typed) String() string { return t.Type() }
 
-// log returns the resolver's construction-time prefixed logger. ctx is returned
-// unchanged for call-site compatibility; request-scoped fields are injected from
-// ctx by the log handler at emit time.
+// log returns the resolver's construction-time prefixed logger, bound to ctx so
+// request-scoped fields (req_id, client_ip, question) are emitted even on the
+// non-Context methods (logger.Debug/Info/...). ctx is returned unchanged for
+// call-site compatibility.
 func (t *typed) log(ctx context.Context) (context.Context, *slog.Logger) {
-	return ctx, t.logger
+	return ctx, log.WithContext(ctx, t.logger)
 }
 
-// logWithFields returns the resolver's logger with extra attrs attached.
+// logWithFields returns the resolver's ctx-bound logger with extra attrs
+// attached. WithAttrs consumes the []slog.Attr directly, avoiding the boxing
+// that logger.With(...any) would incur.
 func (t *typed) logWithFields(ctx context.Context, attrs ...slog.Attr) (context.Context, *slog.Logger) {
-	args := make([]any, len(attrs))
-	for i, a := range attrs {
-		args[i] = a
-	}
+	logger := log.WithContext(ctx, t.logger)
 
-	return ctx, t.logger.With(args...)
+	return ctx, slog.New(logger.Handler().WithAttrs(attrs))
 }
 
 // Should be embedded in a Resolver to auto-implement `config.Configurable`.

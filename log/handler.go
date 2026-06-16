@@ -8,15 +8,37 @@ import (
 // contextHandler injects request-scoped attrs stored in the context into each
 // emitted record. Because injection happens in Handle (after the level check),
 // any slog.LogValuer attrs are resolved only when a record is actually emitted.
+//
+// If bound is non-nil, attrs are read from it instead of the per-call context.
+// This lets WithContext return a logger that injects request fields even when
+// the caller uses the non-Context emit methods (logger.Debug/Info/...), which
+// slog dispatches with context.Background(). A bound handler replaces (rather
+// than wraps) the unbound contextHandler so attrs are never injected twice.
+//
+// NOTE: WithGroup nests subsequently-added attrs, including the ctx attrs
+// injected here, under the group. Do not call WithGroup on a context-aware
+// logger if the request fields must stay top-level; none of blocky's hot paths
+// do (the only WithGroup users are the handler chain itself).
 type contextHandler struct {
-	next slog.Handler
+	next  slog.Handler
+	bound context.Context
+}
+
+func (h *contextHandler) attrCtx(ctx context.Context) context.Context {
+	if h.bound != nil {
+		return h.bound
+	}
+
+	return ctx
 }
 
 func (h *contextHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	return h.next.Enabled(ctx, level)
+	return h.next.Enabled(h.attrCtx(ctx), level)
 }
 
 func (h *contextHandler) Handle(ctx context.Context, r slog.Record) error {
+	ctx = h.attrCtx(ctx)
+
 	if attrs := attrsFromCtx(ctx); len(attrs) > 0 {
 		r.AddAttrs(attrs...)
 	}
@@ -25,11 +47,11 @@ func (h *contextHandler) Handle(ctx context.Context, r slog.Record) error {
 }
 
 func (h *contextHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return &contextHandler{next: h.next.WithAttrs(attrs)}
+	return &contextHandler{next: h.next.WithAttrs(attrs), bound: h.bound}
 }
 
 func (h *contextHandler) WithGroup(name string) slog.Handler {
-	return &contextHandler{next: h.next.WithGroup(name)}
+	return &contextHandler{next: h.next.WithGroup(name), bound: h.bound}
 }
 
 // indentHandler prepends a fixed indent string to every record message. Used

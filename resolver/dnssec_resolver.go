@@ -3,6 +3,7 @@ package resolver
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/0xERR0R/blocky/config"
 	"github.com/0xERR0R/blocky/model"
@@ -77,11 +78,11 @@ func (r *DNSSECResolver) Resolve(ctx context.Context, request *model.Request) (*
 			if opt.UDPSize() < ednsUDPSize {
 				opt.SetUDPSize(ednsUDPSize)
 			}
-			logger.Debug(fmt.Sprintf("DNSSEC DO bit set for query (existing EDNS0): %s", request.Req.Question[0].Name))
+			logger.Debug("DNSSEC DO bit set for query (existing EDNS0)", slog.String("qname", request.Req.Question[0].Name))
 		} else {
 			// No EDNS0 present - add it with DO bit
 			request.Req.SetEdns0(ednsUDPSize, true)
-			logger.Debug(fmt.Sprintf("DNSSEC DO bit set for query (new EDNS0): %s", request.Req.Question[0].Name))
+			logger.Debug("DNSSEC DO bit set for query (new EDNS0)", slog.String("qname", request.Req.Question[0].Name))
 		}
 	}
 
@@ -95,8 +96,9 @@ func (r *DNSSECResolver) Resolve(ctx context.Context, request *model.Request) (*
 	if r.cfg.Validate && r.validator != nil && len(request.Req.Question) > 0 {
 		result := r.validator.ValidateResponse(ctx, response.Res, request.Req.Question[0])
 
-		logger.Debug(fmt.Sprintf("DNSSEC validation result for %s: %s",
-			request.Req.Question[0].Name, result.String()))
+		logger.Debug("DNSSEC validation result",
+			slog.String("qname", request.Req.Question[0].Name),
+			slog.String("result", result.String()))
 
 		switch result {
 		case dnssec.ValidationResultBogus:
@@ -109,14 +111,15 @@ func (r *DNSSECResolver) Resolve(ctx context.Context, request *model.Request) (*
 		case dnssec.ValidationResultSecure:
 			// Valid DNSSEC - set AD flag
 			response.Res.AuthenticatedData = true
-			logger.Debug(fmt.Sprintf("DNSSEC validation succeeded for %s - AD flag set",
-				request.Req.Question[0].Name))
+			logger.Debug("DNSSEC validation succeeded - AD flag set",
+				slog.String("qname", request.Req.Question[0].Name))
 
 		case dnssec.ValidationResultInsecure, dnssec.ValidationResultIndeterminate:
 			// No DNSSEC or cannot validate - clear AD flag
 			response.Res.AuthenticatedData = false
-			logger.Debug(fmt.Sprintf("DNSSEC validation result %s for %s - AD flag cleared",
-				result.String(), request.Req.Question[0].Name))
+			logger.Debug("DNSSEC validation result - AD flag cleared",
+				slog.String("result", result.String()),
+				slog.String("qname", request.Req.Question[0].Name))
 		}
 	}
 

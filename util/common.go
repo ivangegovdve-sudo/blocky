@@ -90,6 +90,19 @@ func (v QuestionLogValuer) LogValue() slog.Value {
 	return slog.StringValue(QuestionToString(v.Questions))
 }
 
+// AnswerLogValuer defers (and obfuscates) AnswerToString formatting until a log
+// record is actually emitted (implements slog.LogValuer), so the work is skipped
+// entirely when the level is disabled. Use as:
+//
+//	slog.Any("answer", util.AnswerLogValuer{Answers: resp.Answer})
+type AnswerLogValuer struct {
+	Answers []dns.RR
+}
+
+func (v AnswerLogValuer) LogValue() slog.Value {
+	return slog.StringValue(Obfuscate(AnswerToString(v.Answers)))
+}
+
 // CreateAnswerFromQuestion creates new answer from a question
 func CreateAnswerFromQuestion(question dns.Question, ip net.IP, remainingTTL uint32) (dns.RR, error) {
 	h := CreateHeader(question, remainingTTL)
@@ -202,11 +215,10 @@ func IterateValueSorted(in map[string]int, fn func(string, int)) {
 	}
 }
 
-// LogOnError logs the message only if error is not nil
+// LogOnError logs the message only if error is not nil, using the ctx-bound
+// logger so request-scoped fields are included.
 func LogOnError(ctx context.Context, message string, err error) {
-	if err != nil {
-		log.FromCtx(ctx).Error(message, log.AttrError(err))
-	}
+	LogOnErrorWithEntry(log.FromCtx(ctx), message, err)
 }
 
 // LogOnErrorWithEntry logs the message only if error is not nil

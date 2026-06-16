@@ -44,6 +44,51 @@ func TestRecorderWithAttrsVisible(t *testing.T) {
 	}
 }
 
+func TestRecorderWithGroupNests(t *testing.T) {
+	logger, rec := NewRecorder()
+
+	logger.WithGroup("dns").Info("m", slog.String("rcode", "NXDOMAIN"))
+
+	// The grouped attr must be nested, mirroring the real handlers, so the
+	// top-level "rcode" key is absent and "dns" holds a group.
+	if _, ok := rec.Attr("rcode"); ok {
+		t.Error("expected rcode to be nested under the group, not top-level")
+	}
+
+	val, ok := rec.Attr("dns")
+	if !ok {
+		t.Fatal("Attr(\"dns\") group not found")
+	}
+
+	if val.Kind() != slog.KindGroup {
+		t.Fatalf("expected dns to be a group, got %v", val.Kind())
+	}
+}
+
+func TestRecorderBaseAttrsPrecedeRecordAttrs(t *testing.T) {
+	logger, rec := NewRecorder()
+
+	// WithAttrs ("base") must come before the per-call attr, like real handlers.
+	logger.With(slog.String("k", "base")).Info("m", slog.String("k", "call"))
+
+	rec.store.mu.Lock()
+	defer rec.store.mu.Unlock()
+
+	var order []string
+
+	rec.store.records[0].Attrs(func(a slog.Attr) bool {
+		if a.Key == "k" {
+			order = append(order, a.Value.String())
+		}
+
+		return true
+	})
+
+	if len(order) != 2 || order[0] != "base" || order[1] != "call" {
+		t.Errorf("attr order = %v, want [base call]", order)
+	}
+}
+
 func TestCaptureGlobalRestores(t *testing.T) {
 	before := Log()
 

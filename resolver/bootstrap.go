@@ -223,7 +223,7 @@ func (b *Bootstrap) dialContext(ctx context.Context, network, addr string) (net.
 
 	ip := ips[rand.Intn(len(ips))] //nolint:gosec
 
-	log.Trace(ctx, logger, fmt.Sprintf("dialing %s", host), slog.Any("ip", ip))
+	log.Trace(ctx, logger, "dialing", slog.String("host", host), slog.Any("ip", ip))
 
 	// Use the standard dialer to actually connect
 	addrWithIP := net.JoinHostPort(ip.String(), port)

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"net"
 	"strconv"
@@ -199,7 +200,8 @@ func (r *quicUpstreamClient) getConnection(ctx context.Context, addr string) (*q
 		case <-connCtx.Done():
 			// Connection is closed; log the cause before discarding.
 			if cause := context.Cause(connCtx); cause != nil { //nolint:contextcheck
-				log.Log().Debug(fmt.Sprintf("QUIC connection to %s closed: %v (%T)", addr, cause, cause))
+				log.Log().Debug("QUIC connection closed",
+					slog.Any("addr", addr), log.AttrError(cause), slog.String("cause_type", fmt.Sprintf("%T", cause)))
 			}
 
 			r.conn = nil

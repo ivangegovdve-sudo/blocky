@@ -205,7 +205,7 @@ func (r *ParallelBestResolver) retryWithDifferent(
 ) (*model.Response, error) {
 	// second try (if retryWithDifferentResolver == true)
 	resolver := weightedRandom(ctx, *r.resolvers.Load(), resolvers)
-	logger.Debug(fmt.Sprintf("using %s as second resolver", resolver.resolver))
+	logger.Debug("using second resolver", slog.Any("resolver", resolver.resolver))
 
 	resp, err := resolver.resolve(ctx, request)
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 	"net/netip"
 
 	"github.com/0xERR0R/blocky/config"
+	"github.com/0xERR0R/blocky/log"
 	"github.com/0xERR0R/blocky/model"
 	"github.com/0xERR0R/blocky/util"
 
@@ -101,7 +102,7 @@ func (r *DNS64Resolver) Resolve(ctx context.Context, request *model.Request) (*m
 	}
 
 	qname := request.Req.Question[0].Name
-	logger.Debug(fmt.Sprintf("received AAAA query for %s, checking for synthesis", qname))
+	logger.Debug("received AAAA query, checking for synthesis", slog.String("qname", qname))
 
 	// Pass query to next resolver
 	response, err := r.next.Resolve(ctx, request)
@@ -131,7 +132,7 @@ func (r *DNS64Resolver) hasValidAAAARecords(response *model.Response, logger *sl
 		return false
 	}
 
-	logger.Debug(fmt.Sprintf("found %d AAAA record(s), checking exclusion set", len(aaaaRecords)))
+	logger.Debug("found AAAA record(s), checking exclusion set", slog.Int("aaaa_count", len(aaaaRecords)))
 
 	// Check if all AAAA records are in exclusion set
 	allExcluded := true
@@ -139,7 +140,7 @@ func (r *DNS64Resolver) hasValidAAAARecords(response *model.Response, logger *sl
 
 	for _, aaaa := range aaaaRecords {
 		if r.isInExclusionSet(aaaa.AAAA) {
-			logger.Debug(fmt.Sprintf("AAAA record %s is in exclusion set", aaaa.AAAA))
+			logger.Debug("AAAA record is in exclusion set", slog.Any("aaaa", aaaa.AAAA))
 			excludedCount++
 		} else {
 			allExcluded = false
@@ -149,13 +150,13 @@ func (r *DNS64Resolver) hasValidAAAARecords(response *model.Response, logger *sl
 	}
 
 	if allExcluded {
-		logger.Debug(fmt.Sprintf("all %d AAAA record(s) in exclusion set, will synthesize", excludedCount))
+		logger.Debug("all AAAA record(s) in exclusion set, will synthesize", slog.Int("excluded_count", excludedCount))
 
 		return false
 	}
 
-	logger.Debug(fmt.Sprintf("%d of %d AAAA record(s) not in exclusion set, using original response",
-		len(aaaaRecords)-excludedCount, len(aaaaRecords)))
+	logger.Debug("AAAA record(s) not in exclusion set, using original response",
+		slog.Int("included_count", len(aaaaRecords)-excludedCount), slog.Int("aaaa_count", len(aaaaRecords)))
 
 	return true
 }
@@ -212,7 +213,7 @@ func (r *DNS64Resolver) synthesizeFromA(
 	// Send A query through next resolver
 	aResponse, err := r.next.Resolve(ctx, aRequest)
 	if err != nil {
-		logger.Debug(fmt.Sprintf("A query failed: %v", err))
+		logger.Debug("A query failed", log.AttrError(err))
 
 		return aaaaResponse, nil // Return original AAAA response
 	}
@@ -240,7 +241,7 @@ func (r *DNS64Resolver) synthesizeFromA(
 
 	if aResponse.Res.Rcode != dns.RcodeSuccess {
 		// Other RCODEs: treat as empty response (alternative behavior from RFC 6147 Section 5.1.2)
-		logger.Debug(fmt.Sprintf("A query returned RCODE %d, treating as empty", aResponse.Res.Rcode))
+		logger.Debug("A query returned non-success RCODE, treating as empty", slog.Int("rcode", aResponse.Res.Rcode))
 
 		return aaaaResponse, nil
 	}
@@ -253,18 +254,18 @@ func (r *DNS64Resolver) synthesizeFromA(
 		return aaaaResponse, nil
 	}
 
-	logger.Debug(fmt.Sprintf("found %d A record(s) for synthesis", len(aRecords)))
+	logger.Debug("found A record(s) for synthesis", slog.Int("a_count", len(aRecords)))
 
 	// Extract CNAME and DNAME records for TTL calculation
 	cnameRecords := util.ExtractRecords[*dns.CNAME](aResponse.Res)
 	dnameRecords := util.ExtractRecords[*dns.DNAME](aResponse.Res)
 
 	if len(cnameRecords) > 0 {
-		logger.Debug(fmt.Sprintf("found %d CNAME record(s) in resolution chain", len(cnameRecords)))
+		logger.Debug("found CNAME record(s) in resolution chain", slog.Int("cname_count", len(cnameRecords)))
 	}
 
 	if len(dnameRecords) > 0 {
-		logger.Debug(fmt.Sprintf("found %d DNAME record(s) in resolution chain", len(dnameRecords)))
+		logger.Debug("found DNAME record(s) in resolution chain", slog.Int("dname_count", len(dnameRecords)))
 	}
 
 	// Synthesize AAAA records
@@ -335,7 +336,8 @@ func calculateMinimumTTL(
 	}
 
 	if len(ttlSources) > 0 {
-		logger.Debug(fmt.Sprintf("using minimum TTL %d from resolution chain (sources: %v)", minTTL, ttlSources))
+		logger.Debug("using minimum TTL from resolution chain",
+			slog.Any("min_ttl", minTTL), slog.Any("ttl_sources", ttlSources))
 	}
 
 	return minTTL
@@ -354,7 +356,8 @@ func (r *DNS64Resolver) synthesizeAAAARecords(
 	// Synthesize AAAA records
 	var aaaaRecords []*dns.AAAA
 
-	logger.Debug(fmt.Sprintf("synthesizing with %d prefix(es): %v", len(r.prefixes), r.prefixes))
+	logger.Debug("synthesizing with prefix(es)",
+		slog.Int("prefix_count", len(r.prefixes)), slog.Any("prefixes", r.prefixes))
 
 	for _, aRecord := range aRecords {
 		for _, prefix := range r.prefixes {
@@ -376,8 +379,12 @@ func (r *DNS64Resolver) synthesizeAAAARecords(
 			}
 			aaaaRecords = append(aaaaRecords, aaaa)
 
-			logger.Debug(fmt.Sprintf("synthesized %s AAAA %s (from A %s, prefix %s, TTL %d)",
-				aaaa.Hdr.Name, ipv6, aRecord.A, prefix, minTTL))
+			logger.Debug("synthesized AAAA record",
+				slog.String("name", aaaa.Hdr.Name),
+				slog.Any("aaaa", ipv6),
+				slog.Any("a", aRecord.A),
+				slog.Any("prefix", prefix),
+				slog.Any("ttl", minTTL))
 		}
 	}
 

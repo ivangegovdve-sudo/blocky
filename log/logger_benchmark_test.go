@@ -39,7 +39,7 @@ func BenchmarkFromCtx(b *testing.B) {
 	}
 }
 
-func BenchmarkWrapCtxWithPrefix(b *testing.B) {
+func BenchmarkFromCtxWithPrefix(b *testing.B) {
 	ctx, _ := CtxWithFields(context.Background(), requestAttrs()...)
 	benchSetup(b, slog.LevelInfo)
 

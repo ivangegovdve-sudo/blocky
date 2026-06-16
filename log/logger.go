@@ -133,7 +133,9 @@ func replaceAttr(cfg *Config) func([]string, slog.Attr) slog.Attr {
 
 		if a.Key == slog.LevelKey {
 			if lvl, ok := a.Value.Any().(slog.Level); ok && lvl == LevelTrace {
-				return slog.String(slog.LevelKey, "TRACE")
+				// Derive the upper-case label from the single canonical name
+				// (level.go) so the two never drift.
+				return slog.String(slog.LevelKey, strings.ToUpper(Level(LevelTrace).String()))
 			}
 		}
 
